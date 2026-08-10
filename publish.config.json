@@ -1,0 +1,24 @@
+{
+	"serverInfo": {
+		"host": "101.43.50.15",
+		"username": "root",
+		"port": "22"
+	},
+	"nginxInfo": {
+		"remoteFilePath": "/usr/local/nginx/conf",
+		"restartPath": "/usr/local/nginx/sbin"
+	},
+	"serviceInfo": {
+		"restartPath": "/usr/local/dnhyxc-ai/server"
+	},
+	"restartScript": "pm2 restart server",
+	"micro": {
+		"name": "micro",
+		"localFilePath": {
+			"mac": "/Users/dnhyxc/Documents/code/dnhyxc-ai/apps/micro",
+			"windows": "E:\\code\\dnhyxc-ai\\apps\\micro"
+		},
+		"remoteFilePath": "/usr/local/nginx/micro",
+		"isServer": false
+	}
+}

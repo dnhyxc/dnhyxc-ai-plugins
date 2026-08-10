@@ -1,0 +1,61 @@
+.note-preview-editor {
+	background: transparent;
+}
+
+.note-preview-editor .rich-editor-body,
+.note-preview-static.rich-editor-body {
+	padding: 0.75rem;
+	text-align: justify;
+}
+
+.note-preview-tiptap {
+	cursor: default;
+	-webkit-user-select: text;
+	user-select: text;
+}
+
+.note-preview-editor .rich-editor-note-title,
+.note-preview-editor [data-node-view-wrapper].rich-editor-note-title {
+	display: none !important;
+}
+
+/* 首块标题等去顶距。不要写 img/:first-child——WebKit+@scope 下会把后续图的间距也清掉；
+   图的顶距由 RichEditor 里「前驱 + img」规则负责。 */
+.note-preview-editor .ProseMirror
+	> :first-child:is(h1, h2, h3, h4, h5, h6, blockquote, pre, hr, ul, ol, table),
+.note-preview-static
+	.ProseMirror
+	> :first-child:is(h1, h2, h3, h4, h5, h6, blockquote, pre, hr, ul, ol, table),
+.note-preview-static.rich-editor-body
+	> .tiptap
+	> :first-child:is(
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6,
+		blockquote,
+		pre,
+		hr,
+		ul,
+		ol,
+		table
+	) {
+	margin-top: 0;
+}
+
+/* 静态预览：todo 勾选仅展示，避免误点 */
+.note-preview-static ul[data-type="taskList"] label {
+	pointer-events: none;
+}
+
+/* 空段兜底高度（与编辑态 line-height: 1.9 对齐） */
+.note-preview-static .tiptap p:empty {
+	min-height: 1.9em;
+}
+
+/* 分帧挂载中：不挡交互，略提示仍在填充 */
+.note-preview-filling {
+	opacity: 0.98;
+}

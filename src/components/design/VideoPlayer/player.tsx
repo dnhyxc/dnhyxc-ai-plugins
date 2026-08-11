@@ -1268,6 +1268,7 @@ export default function VideoPlayer({
 						"pointer-events-none absolute top-0 left-0 z-2 box-border w-full overflow-hidden p-[9px_10px_0] text-left text-base text-ellipsis whitespace-nowrap",
 						chromeFg,
 						chromeHidden && "pointer-events-none opacity-0!",
+						"[text-shadow:0_1px_1px_color-mix(in_oklch,var(--theme-background)_35%,transparent)]",
 					)}
 				>
 					{currentVideoName}
@@ -1354,7 +1355,7 @@ export default function VideoPlayer({
 							{existDuration ? (
 								<div
 									ref={timePointRef}
-									className="absolute top-1/2 right-[-5px] z-999 box-border h-[calc(100%+6px)] w-2.5 -translate-y-1/2 cursor-grab rounded-[2px] border border-theme/10 bg-teal-500 opacity-0 shadow-[0_0_2px_rgba(0,0,0,0.3)] transition-opacity duration-200 ease-in-out pointer-events-auto active:cursor-grabbing group-hover/progress:opacity-100"
+									className="absolute top-1/2 right-[-5px] z-999 box-border h-[calc(100%+6px)] w-2.5 -translate-y-1/2 cursor-grab rounded-[2px] border border-theme/10 bg-teal-500 opacity-0 shadow-[0_0_2px_rgba(0,0,0,0.3)] transition-opacity duration-200 ease-in-out pointer-events-auto group-hover/progress:opacity-100"
 									onMouseDown={onTimePointDragStart}
 								/>
 							) : null}
@@ -1379,8 +1380,8 @@ export default function VideoPlayer({
 					className={cn(
 						"relative z-1 my-[15px] flex items-end justify-between",
 						/* 文字/图标阴影：取主题色做半透明投影，提升在视频画面上的可读性 */
-						"[text-shadow:0_1px_2px_color-mix(in_oklch,var(--theme-background)_45%,transparent)]",
-						"[&_svg]:filter-[drop-shadow(0_1px_2px_color-mix(in_oklch,var(--theme-background)_45%,transparent))]",
+						"[text-shadow:0_1px_1px_color-mix(in_oklch,var(--theme-background)_35%,transparent)]",
+						"[&_svg]:filter-[drop-shadow(0_1px_1px_color-mix(in_oklch,var(--theme-background)_35%,transparent))]",
 					)}
 				>
 					<div className={cn("flex items-center", chromeFg)}>

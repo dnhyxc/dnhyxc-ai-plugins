@@ -255,6 +255,8 @@ export function useDragDropFileUpload(
 	const zoneRef = useRef<HTMLDivElement | null>(null);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const dragDepthRef = useRef(0);
+	/** 原生/自定义选文件对话框打开中：忽略拖入，避免与 rfd 事件冲突 */
+	const pickerOpenRef = useRef(false);
 	const optsRef = useRef(options);
 	optsRef.current = options;
 
@@ -278,7 +280,7 @@ export function useDragDropFileUpload(
 	);
 
 	const onDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
-		if (optsRef.current.disabled) return;
+		if (optsRef.current.disabled || pickerOpenRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragDepthRef.current += 1;
@@ -286,7 +288,7 @@ export function useDragDropFileUpload(
 	}, []);
 
 	const onDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
-		if (optsRef.current.disabled) return;
+		if (optsRef.current.disabled || pickerOpenRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		dragDepthRef.current -= 1;
@@ -297,7 +299,7 @@ export function useDragDropFileUpload(
 	}, []);
 
 	const onDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
-		if (optsRef.current.disabled) return;
+		if (optsRef.current.disabled || pickerOpenRef.current) return;
 		e.preventDefault();
 		e.stopPropagation();
 		try {
@@ -309,11 +311,11 @@ export function useDragDropFileUpload(
 
 	const onDrop = useCallback(
 		(e: DragEvent<HTMLDivElement>) => {
-			if (optsRef.current.disabled) return;
 			e.preventDefault();
 			e.stopPropagation();
 			dragDepthRef.current = 0;
 			setZoneDragActive(zoneRef.current, false);
+			if (optsRef.current.disabled || pickerOpenRef.current) return;
 			const files = e.dataTransfer?.files;
 			if (files?.length) emit(files, 'drop');
 		},
@@ -330,12 +332,19 @@ export function useDragDropFileUpload(
 	);
 
 	const openFilePicker = useCallback(() => {
-		if (optsRef.current.disabled) return;
+		if (optsRef.current.disabled || pickerOpenRef.current) return;
 		const pick = optsRef.current.pickFiles;
 		if (pick) {
-			void pick().then((files) => {
-				if (files?.length) emit(files, 'input');
-			});
+			pickerOpenRef.current = true;
+			dragDepthRef.current = 0;
+			setZoneDragActive(zoneRef.current, false);
+			void pick()
+				.then((files) => {
+					if (files?.length) emit(files, 'input');
+				})
+				.finally(() => {
+					pickerOpenRef.current = false;
+				});
 			return;
 		}
 		inputRef.current?.click();

@@ -40,7 +40,7 @@ export type VideoUploadHandle = DragDropFileUploadHandle;
 
 export type VideoUploadProps = Omit<
 	DragDropFileUploadProps,
-	'accept' | 'multiple' | 'maxCount' | 'onFiles'
+	'accept' | 'acceptExtensionOnly' | 'multiple' | 'maxCount' | 'onFiles'
 > & {
 	existingCount?: number;
 	maxCount?: number;
@@ -64,6 +64,9 @@ const FEATURES = [
 ] as const;
 
 const FORMATS = ['MP4', 'WebM', 'MOV', 'MKV', 'FLV'];
+
+/** 系统对话框 + 拖拽校验共用；仅扩展名（acceptExtensionOnly） */
+export const VIDEO_ACCEPT = '.mp4,.webm,.mov,.mkv,.flv,.m4v,.ogg,.ogv';
 
 export const VideoUpload = forwardRef<VideoUploadHandle, VideoUploadProps>(
 	function VideoUpload(
@@ -114,11 +117,12 @@ export const VideoUpload = forwardRef<VideoUploadHandle, VideoUploadProps>(
 							'hover:border-teal-500 data-drag-active:!border-teal-500',
 							zoneClassName,
 						)}
-						accept="video/*"
+						{...rest}
+						accept={VIDEO_ACCEPT}
+						acceptExtensionOnly
 						multiple
 						maxCount={remain}
 						ariaLabel={ariaLabel ?? t('videoPlayer.selectVideo')}
-						{...rest}
 						disabled={remain <= 0 || Boolean(rest.disabled)}
 					>
 						{children ?? (

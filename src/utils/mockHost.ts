@@ -3,6 +3,18 @@
 const DOCX_MIME =
 	'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+type PickLocalFilesOptions = {
+	accept?: string;
+	multiple?: boolean;
+	title?: string;
+};
+
+type HostPickedLocalFile = {
+	path: string;
+	name: string;
+	src: string;
+};
+
 /** 独立预览无 Tauri：用浏览器 `<a download>` 模拟 Host downloadBlob */
 async function mockDownloadBlob(options: {
 	fileName: string;
@@ -35,6 +47,41 @@ async function mockDownloadBlob(options: {
 	}
 }
 
+/** 独立预览：input 模拟 Host pickLocalFiles */
+function mockPickLocalFiles(
+	options?: PickLocalFilesOptions,
+): Promise<HostPickedLocalFile[] | null> {
+	return new Promise((resolve) => {
+		const input = document.createElement('input');
+		input.type = 'file';
+		if (options?.accept?.trim()) input.accept = options.accept.trim();
+		input.multiple = options?.multiple === true;
+		input.style.display = 'none';
+		document.body.appendChild(input);
+		const cleanup = () => input.remove();
+		input.addEventListener('change', () => {
+			const list = Array.from(input.files ?? []);
+			cleanup();
+			if (!list.length) {
+				resolve(null);
+				return;
+			}
+			resolve(
+				list.map((f) => ({
+					path: f.name,
+					name: f.name,
+					src: URL.createObjectURL(f),
+				})),
+			);
+		});
+		input.addEventListener('cancel', () => {
+			cleanup();
+			resolve(null);
+		});
+		input.click();
+	});
+}
+
 export function mockApi(extra?: Record<string, unknown>) {
 	return {
 		theme: 'light' as const,
@@ -47,6 +94,7 @@ export function mockApi(extra?: Record<string, unknown>) {
 		ui: {
 			showToast: (o: { message: string }) => console.info('[toast]', o.message),
 			downloadBlob: mockDownloadBlob,
+			pickLocalFiles: mockPickLocalFiles,
 		},
 		...extra,
 	};

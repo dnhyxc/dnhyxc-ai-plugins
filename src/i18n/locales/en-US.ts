@@ -131,6 +131,10 @@ const enUS: Record<string, string> = {
 	'videoPlayer.tipTitle': 'Quick Tip',
 	'videoPlayer.tipDesc':
 		'Batch upload up to 100 video files. Drag files into this area or click to select.',
+	'videoPlayer.rejectAccept': 'Videos only. Ignored: {name}',
+	'videoPlayer.rejectAcceptMany': '{count} non-video files were ignored',
+	'videoPlayer.rejectMaxCount': 'Too many files (max {max} this time)',
+	'videoPlayer.rejectMixed': '{count} files failed validation and were ignored',
 	'videoPlayer.remainingSlots': 'Available',
 	'videoPlayer.totalSlots': 'Limit',
 	'videoPlayer.episodes': 'Episodes',

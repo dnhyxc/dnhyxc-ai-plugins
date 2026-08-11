@@ -125,6 +125,10 @@ const zhCN: Record<string, string> = {
 	'videoPlayer.tipTitle': '快速提示',
 	'videoPlayer.tipDesc':
 		'支持批量上传，最多 100 个视频文件。拖拽文件到此区域或点击选择。',
+	'videoPlayer.rejectAccept': '仅支持视频文件，已忽略：{name}',
+	'videoPlayer.rejectAcceptMany': '有 {count} 个文件不是视频，已忽略',
+	'videoPlayer.rejectMaxCount': '超出可上传数量（本次最多 {max} 个）',
+	'videoPlayer.rejectMixed': '有 {count} 个文件未通过校验，已忽略',
 	'videoPlayer.remainingSlots': '可上传',
 	'videoPlayer.totalSlots': '上限',
 	'videoPlayer.episodes': '选集',

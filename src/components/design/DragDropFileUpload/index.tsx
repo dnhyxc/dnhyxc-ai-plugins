@@ -269,8 +269,10 @@ export function useDragDropFileUpload(
 				validateFile: optsRef.current.validateFile,
 			});
 			if (rejected.length) optsRef.current.onReject?.(rejected, source);
-			if (accepted.length)
+			// 全被拒绝时也要回调，否则上层无法 toast / 提示
+			if (accepted.length || rejected.length) {
 				optsRef.current.onFiles({ accepted, rejected }, source);
+			}
 		},
 		[],
 	);

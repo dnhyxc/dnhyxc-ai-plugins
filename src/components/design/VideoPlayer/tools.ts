@@ -51,6 +51,26 @@ export function appendVideoFiles(
 	return next.length === existing.length ? [...existing] : next;
 }
 
+/** Host `pickLocalFiles` 结果入库（src 已是可播放 URL，勿再 createObjectURL） */
+export function appendPickedVideos(
+	items: readonly { name: string; src: string }[],
+	existing: readonly VideoItem[] = [],
+	limit = LIMIT,
+): VideoItem[] {
+	const next = [...existing];
+	for (const item of items) {
+		if (next.length >= limit) break;
+		if (next.some((i) => i.name === item.name && i.url === item.src)) {
+			continue;
+		}
+		next.push({
+			url: item.src,
+			name: item.name,
+		});
+	}
+	return next.length === existing.length ? [...existing] : next;
+}
+
 /** 释放 blob: URL，避免泄漏 */
 export function revokeVideoUrls(items: readonly VideoItem[]): void {
 	for (const item of items) {

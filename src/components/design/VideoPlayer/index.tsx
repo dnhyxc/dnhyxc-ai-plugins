@@ -1,6 +1,7 @@
 export { default, default as VideoPlayer } from './player';
 export type { PlayType, ScreenType, VideoItem, VideoUrlList } from './tools';
 export {
+	appendPickedVideos,
 	appendVideoFiles,
 	enterFullscreen,
 	exitFullscreen,

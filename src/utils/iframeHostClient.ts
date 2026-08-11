@@ -33,6 +33,18 @@ type HostBridgeProps = {
 				hostToasted: boolean;
 				message?: string;
 			}>;
+			pickLocalFiles?: (options?: {
+				accept?: string;
+				multiple?: boolean;
+				title?: string;
+			}) => Promise<
+				| {
+						path: string;
+						name: string;
+						src: string;
+				  }[]
+				| null
+			>;
 		};
 		modules?: Readonly<Record<string, unknown>>;
 	};
@@ -138,6 +150,15 @@ export function connectIframeHost(pluginId: string): Promise<HostBridgeProps> {
 									hostToasted: boolean;
 									message?: string;
 								}>,
+							pickLocalFiles: (options) =>
+								rpc('ui.pickLocalFiles', [options]) as Promise<
+									| {
+											path: string;
+											name: string;
+											src: string;
+									  }[]
+									| null
+								>,
 						},
 						modules: {
 							ebook: {

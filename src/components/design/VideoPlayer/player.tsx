@@ -1379,8 +1379,8 @@ export default function VideoPlayer({
 					className={cn(
 						"relative z-1 my-[15px] flex items-end justify-between",
 						/* 文字/图标阴影：取主题色做半透明投影，提升在视频画面上的可读性 */
-						"[text-shadow:0_1px_2px_color-mix(in_oklch,var(--theme-color)_45%,transparent)]",
-						"[&_svg]:[filter:drop-shadow(0_1px_2px_color-mix(in_oklch,var(--theme-color)_45%,transparent))]",
+						"[text-shadow:0_1px_2px_color-mix(in_oklch,var(--theme-background)_45%,transparent)]",
+						"[&_svg]:filter-[drop-shadow(0_1px_2px_color-mix(in_oklch,var(--theme-background)_45%,transparent))]",
 					)}
 				>
 					<div className={cn("flex items-center", chromeFg)}>

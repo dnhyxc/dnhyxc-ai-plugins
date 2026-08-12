@@ -35,6 +35,22 @@ export function extractTitleText(html: string): string {
 	return node.replace(/<[^>]+>/g, '').trim();
 }
 
+/**
+ * 是否有可保存的正文：纯文字，或仅图片等媒体（getText 不含 img）。
+ * title 节点不算正文。
+ */
+export function hasNoteBodyContent(html: string, text = ''): boolean {
+	if (text.trim()) return true;
+	const body = stripNoteTitleHtml(html);
+	if (/<(img|video|audio|iframe|embed)\b/i.test(body)) return true;
+	return (
+		body
+			.replace(/<[^>]+>/g, '')
+			.replace(/&nbsp;/gi, ' ')
+			.trim().length > 0
+	);
+}
+
 export function titleToHtml(title: string): string {
 	const safe = title
 		.replace(/&/g, '&amp;')

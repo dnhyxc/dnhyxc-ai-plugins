@@ -8,6 +8,7 @@ import {
 	type Note,
 	type NotesApi,
 } from '@/views/learning-notes/api';
+import { hasNoteBodyContent } from '@/views/learning-notes/utils/doc';
 
 type ToastFn = (message: string, type?: 'success' | 'error' | 'info') => void;
 type TFn = (key: string, params?: Record<string, unknown>) => string;
@@ -33,7 +34,7 @@ function toastUnlessHostHttp(toast: ToastFn, e: unknown, t: TFn) {
  */
 class LearningNotesStore {
 	private api: NotesApi | null = null;
-	private toast: ToastFn = () => {};
+	private toast: ToastFn = () => { };
 	private t: TFn = translateSync;
 	/** Host 透传的 downloadBlob（Web / Tauri2）；独立预览可由 mock 注入 */
 	private downloadBlob: HostDownloadBlob | null = null;
@@ -259,7 +260,8 @@ class LearningNotesStore {
 			this.toast(this.t('learningNotes.toast.needTitle'), 'info');
 			return false;
 		}
-		if (!input.text.trim()) {
+		// getText 不含图片；仅图无字也应可存
+		if (!hasNoteBodyContent(input.html, input.text)) {
 			this.toast(this.t('learningNotes.toast.needContent'), 'info');
 			return false;
 		}

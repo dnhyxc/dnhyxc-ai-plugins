@@ -1371,7 +1371,7 @@ export function NoteTitleField({
           </span>
         </div>
         <Input
-          className="h-12 size-full px-0 py-0 text-xl md:text-xl rounded-none border-0 bg-transparent text-textcolor shadow-none placeholder:text-lg placeholder:text-textcolor/35 focus-visible:border-0 focus-visible:ring-0"
+          className="h-12 size-full px-0 py-0 md:text-xl rounded-none border-0 bg-transparent shadow-none placeholder:text-lg placeholder:text-textcolor/35 focus-visible:ring-0"
           value={local}
           placeholder={editorLocale.placeholderHeadingHint}
           maxLength={50}
@@ -1946,7 +1946,7 @@ export function LinkForm({
         type="text"
         inputMode="url"
         autoComplete="url"
-        className="text-textcolor/80 flex-1 shadow-none border-theme/15 focus-visible:border-theme/30 focus-visible:ring-0"
+        className="text-textcolor/80 flex-1 shadow-none border-theme/15 focus-visible:ring-0"
         placeholder={t.linkPlaceholder}
         value={href}
         onChange={(e) => onHrefChange(e.target.value)}

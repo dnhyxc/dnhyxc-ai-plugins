@@ -144,6 +144,7 @@ const zhCN: Record<string, string> = {
 	'videoPlayer.speed': '播放倍速',
 	'videoPlayer.pip': '画中画',
 	'videoPlayer.pipPlaying': '视频正在画中画中播放',
+	'videoPlayer.exitPip': '退出画中画',
 	'videoPlayer.fullscreen': '全屏',
 	'videoPlayer.exitFullscreen': '退出全屏',
 };

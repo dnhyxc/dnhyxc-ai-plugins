@@ -150,6 +150,7 @@ const enUS: Record<string, string> = {
 	'videoPlayer.speed': 'Playback speed',
 	'videoPlayer.pip': 'Picture in picture',
 	'videoPlayer.pipPlaying': 'This video is playing in picture in picture',
+	'videoPlayer.exitPip': 'Exit picture in picture',
 	'videoPlayer.fullscreen': 'Fullscreen',
 	'videoPlayer.exitFullscreen': 'Exit fullscreen',
 };

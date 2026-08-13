@@ -211,7 +211,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 					{error ? (
 						<p className="text-textcolor px-2 py-2">{error}</p>
 					) : items.length === 0 ? (
-						<p className="text-textcolor/55 px-2 py-4">
+						<p className="text-textcolor/55 px-2 py-4 text-center">
 							{t("highlightsList.empty")}
 						</p>
 					) : (

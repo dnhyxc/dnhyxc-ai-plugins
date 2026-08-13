@@ -213,7 +213,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 					{error ? (
 						<p className="text-destructive px-2 py-2">{error}</p>
 					) : items.length === 0 ? (
-						<p className="text-textcolor/55 px-2 py-4">
+						<p className="text-textcolor/55 px-2 py-4 text-center">
 							{t("ideasList.empty")}
 						</p>
 					) : (

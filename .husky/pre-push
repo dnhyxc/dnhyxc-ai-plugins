@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# push 前全量校验：格式/lint 不通过则禁止推送（不写回文件）
+echo "Running Biome check before push..."
+pnpm exec biome check --no-errors-on-unmatched

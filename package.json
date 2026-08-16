@@ -26,6 +26,7 @@
 		"restart": "npx dnhyxc-ci restart server -rsc 'pm2 restart server'",
 		"check": "biome check --write",
 		"check:staged": "biome check --staged --no-errors-on-unmatched",
+		"check:verify": "biome check --no-errors-on-unmatched",
 		"format": "biome format --write",
 		"prepare": "husky install",
 		"commit": "git-cz"

@@ -1,11 +1,11 @@
-import Loading from "@design/Loading";
-import { Button, ScrollArea } from "@ui/index";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useHostLocale, useI18n } from "@/hooks";
-import type { Locale } from "@/i18n";
-import { cn } from "@/lib/utils";
-import "@/styles.css";
-import { Quote } from "lucide-react";
+import Loading from '@design/Loading';
+import { Button, ScrollArea } from '@ui/index';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useHostLocale, useI18n } from '@/hooks';
+import type { Locale } from '@/i18n';
+import { cn } from '@/lib/utils';
+import '@/styles.css';
+import { Quote } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -32,7 +32,7 @@ type EbookModules = {
 
 type HostBridgeProps = {
 	api: {
-		theme: "light" | "dark";
+		theme: 'light' | 'dark';
 		locale?: Locale;
 		navigate?: (to: string) => void;
 		event: {
@@ -49,7 +49,7 @@ type HostBridgeProps = {
 		ui?: {
 			showToast: (options: {
 				message: string;
-				type?: "success" | "error" | "info";
+				type?: 'success' | 'error' | 'info';
 			}) => void;
 		};
 		modules?: Readonly<Record<string, unknown>>;
@@ -67,12 +67,12 @@ type ThoughtPage = {
 
 function unwrapPage(res: unknown): ThoughtPage {
 	const body =
-		res && typeof res === "object" && "data" in res
+		res && typeof res === 'object' && 'data' in res
 			? (res as { data: unknown }).data
 			: res;
 	if (
 		body &&
-		typeof body === "object" &&
+		typeof body === 'object' &&
 		Array.isArray((body as ThoughtPage).list)
 	) {
 		const page = body as ThoughtPage;
@@ -87,7 +87,7 @@ function unwrapPage(res: unknown): ThoughtPage {
 }
 
 function formatTime(iso: string | undefined, locale: Locale): string {
-	if (!iso) return "";
+	if (!iso) return '';
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
 	return d.toLocaleString(locale);
@@ -142,7 +142,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 					setTotal(0);
 					setPageNo(0);
 				} else {
-					api.ui?.showToast({ message, type: "error" });
+					api.ui?.showToast({ message, type: 'error' });
 				}
 			} finally {
 				inflightRef.current = false;
@@ -158,7 +158,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 			setItems([]);
 			setTotal(0);
 			setPageNo(0);
-			setError(bookId ? null : t("ideasList.unboundBook"));
+			setError(bookId ? null : t('ideasList.unboundBook'));
 			return;
 		}
 		void fetchPage(1, false);
@@ -174,7 +174,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 				if (!entries[0]?.isIntersecting) return;
 				void fetchPage(pageNo + 1, true);
 			},
-			{ root, rootMargin: "120px 0px", threshold: 0 },
+			{ root, rootMargin: '120px 0px', threshold: 0 },
 		);
 		io.observe(target);
 		return () => io.disconnect();
@@ -194,7 +194,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 					{bookTitle}
 					{total > 0 ? (
 						<span className="text-textcolor/40 ml-2">
-							{t("common.loadedCount", {
+							{t('common.loadedCount', {
 								loaded: items.length,
 								total,
 							})}
@@ -214,7 +214,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 						<p className="text-destructive px-2 py-2">{error}</p>
 					) : items.length === 0 ? (
 						<p className="text-textcolor/55 px-2 py-4 text-center">
-							{t("ideasList.empty")}
+							{t('ideasList.empty')}
 						</p>
 					) : (
 						<div className="flex min-h-0 w-full flex-1 flex-col gap-1">
@@ -225,8 +225,8 @@ function IdeasListApp({ api }: HostBridgeProps) {
 										variant="ghost"
 										onClick={() => onOpen(thought)}
 										className={cn(
-											"h-auto w-full flex-col items-stretch gap-0 rounded-md px-2 py-2 text-left font-normal whitespace-normal",
-											"hover:bg-theme/10",
+											'h-auto w-full flex-col items-stretch gap-0 rounded-md px-2 py-2 text-left font-normal whitespace-normal',
+											'hover:bg-theme/10',
 										)}
 									>
 										{thought.quote ? (
@@ -235,12 +235,12 @@ function IdeasListApp({ api }: HostBridgeProps) {
 											</p>
 										) : null}
 										<p className="text-textcolor line-clamp-3 text-justify leading-snug">
-											{thought.content || t("ideasList.noBody")}
+											{thought.content || t('ideasList.noBody')}
 										</p>
 										<p className="text-textcolor/50 mt-1.5 text-left text-xs">
 											{[thought.username, formatTime(thought.createdAt, locale)]
 												.filter(Boolean)
-												.join(" · ")}
+												.join(' · ')}
 										</p>
 									</Button>
 								</div>
@@ -248,12 +248,12 @@ function IdeasListApp({ api }: HostBridgeProps) {
 							<div ref={sentinelRef} className="h-1 w-full" aria-hidden />
 							{loadingMore ? (
 								<p className="text-textcolor/45 pb-3 text-center text-xs">
-									{t("common.loadingMore")}
+									{t('common.loadingMore')}
 								</p>
 							) : null}
 							{!hasMore && items.length > 0 ? (
 								<p className="text-textcolor/35 pb-3 text-center text-xs">
-									{t("common.noMore")}
+									{t('common.noMore')}
 								</p>
 							) : null}
 						</div>
@@ -264,12 +264,12 @@ function IdeasListApp({ api }: HostBridgeProps) {
 	);
 }
 
-IdeasListApp.activate = async (api: HostBridgeProps["api"]) => {
-	console.log("[ebook-ideas] activate", api);
+IdeasListApp.activate = async (api: HostBridgeProps['api']) => {
+	console.log('[ebook-ideas] activate', api);
 };
 
 IdeasListApp.deactivate = () => {
-	console.log("[ebook-ideas] deactivate");
+	console.log('[ebook-ideas] deactivate');
 };
 
 export default IdeasListApp;

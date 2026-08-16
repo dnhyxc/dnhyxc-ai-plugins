@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# 格式与 lint 在 pre-commit 中校验；此处仅校验提交信息（Conventional Commits）
+npx --no-install commitlint --edit $1

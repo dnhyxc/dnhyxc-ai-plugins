@@ -1,10 +1,10 @@
-import Loading from "@design/Loading";
-import { Button, ScrollArea } from "@ui/index";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useHostLocale, useI18n } from "@/hooks";
-import type { Locale } from "@/i18n";
-import { cn } from "@/lib/utils";
-import "@/styles.css";
+import Loading from '@design/Loading';
+import { Button, ScrollArea } from '@ui/index';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useHostLocale, useI18n } from '@/hooks';
+import type { Locale } from '@/i18n';
+import { cn } from '@/lib/utils';
+import '@/styles.css';
 
 const PAGE_SIZE = 50;
 
@@ -13,7 +13,7 @@ type Highlight = {
 	userId: number;
 	cfiRange: string;
 	quote: string;
-	style: "highlight" | "underline" | "wavy" | string;
+	style: 'highlight' | 'underline' | 'wavy' | string;
 	color: string;
 	createdAt?: string;
 	updatedAt?: string;
@@ -28,7 +28,7 @@ type EbookModules = {
 
 type HostBridgeProps = {
 	api: {
-		theme: "light" | "dark";
+		theme: 'light' | 'dark';
 		locale?: Locale;
 		event: {
 			on: (event: string, handler: (data?: unknown) => void) => void;
@@ -41,7 +41,7 @@ type HostBridgeProps = {
 		ui?: {
 			showToast: (options: {
 				message: string;
-				type?: "success" | "error" | "info";
+				type?: 'success' | 'error' | 'info';
 			}) => void;
 		};
 		modules?: Readonly<Record<string, unknown>>;
@@ -59,12 +59,12 @@ type HighlightPage = {
 
 function unwrapPage(res: unknown): HighlightPage {
 	const body =
-		res && typeof res === "object" && "data" in res
+		res && typeof res === 'object' && 'data' in res
 			? (res as { data: unknown }).data
 			: res;
 	if (
 		body &&
-		typeof body === "object" &&
+		typeof body === 'object' &&
 		Array.isArray((body as HighlightPage).list)
 	) {
 		const page = body as HighlightPage;
@@ -79,16 +79,16 @@ function unwrapPage(res: unknown): HighlightPage {
 }
 
 function formatTime(iso: string | undefined, locale: Locale): string {
-	if (!iso) return "";
+	if (!iso) return '';
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
 	return d.toLocaleString(locale);
 }
 
 function styleLabel(style: string, t: (key: string) => string): string {
-	if (style === "underline") return t("highlightsList.style.underline");
-	if (style === "wavy") return t("highlightsList.style.wavy");
-	return t("highlightsList.style.highlight");
+	if (style === 'underline') return t('highlightsList.style.underline');
+	if (style === 'wavy') return t('highlightsList.style.wavy');
+	return t('highlightsList.style.highlight');
 }
 
 /** 全书划线：分页滚动加载当前用户在本书的全部划线 */
@@ -141,7 +141,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 					setTotal(0);
 					setPageNo(0);
 				} else {
-					api.ui?.showToast({ message, type: "error" });
+					api.ui?.showToast({ message, type: 'error' });
 				}
 			} finally {
 				inflightRef.current = false;
@@ -157,7 +157,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 			setItems([]);
 			setTotal(0);
 			setPageNo(0);
-			setError(bookId ? null : t("highlightsList.unboundBook"));
+			setError(bookId ? null : t('highlightsList.unboundBook'));
 			return;
 		}
 		void fetchPage(1, false);
@@ -173,7 +173,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 				if (!entries[0]?.isIntersecting) return;
 				void fetchPage(pageNo + 1, true);
 			},
-			{ root, rootMargin: "120px 0px", threshold: 0 },
+			{ root, rootMargin: '120px 0px', threshold: 0 },
 		);
 		io.observe(target);
 		return () => io.disconnect();
@@ -192,7 +192,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 					{bookTitle}
 					{total > 0 ? (
 						<span className="text-textcolor/40 ml-2">
-							{t("common.loadedCount", {
+							{t('common.loadedCount', {
 								loaded: items.length,
 								total,
 							})}
@@ -212,7 +212,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 						<p className="text-textcolor px-2 py-2">{error}</p>
 					) : items.length === 0 ? (
 						<p className="text-textcolor/55 px-2 py-4 text-center">
-							{t("highlightsList.empty")}
+							{t('highlightsList.empty')}
 						</p>
 					) : (
 						<div className="flex min-h-0 w-full flex-1 flex-col gap-1">
@@ -223,12 +223,12 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 										variant="ghost"
 										onClick={() => onOpen(row)}
 										className={cn(
-											"h-auto w-full flex-col items-stretch gap-0 rounded-md px-2 py-2 text-left font-normal whitespace-normal",
-											"hover:bg-theme/10",
+											'h-auto w-full flex-col items-stretch gap-0 rounded-md px-2 py-2 text-left font-normal whitespace-normal',
+											'hover:bg-theme/10',
 										)}
 									>
 										<p className="mb-1.5 flex items-start gap-1 text-justify text-sm text-textcolor line-clamp-3">
-											{row.quote?.trim() || t("highlightsList.noQuote")}
+											{row.quote?.trim() || t('highlightsList.noQuote')}
 										</p>
 										<p className="text-textcolor/50 text-left text-xs">
 											{[
@@ -236,7 +236,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 												formatTime(row.createdAt, locale),
 											]
 												.filter(Boolean)
-												.join(" · ")}
+												.join(' · ')}
 										</p>
 									</Button>
 								</div>
@@ -244,12 +244,12 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 							<div ref={sentinelRef} className="h-1 w-full" aria-hidden />
 							{loadingMore ? (
 								<p className="text-textcolor/45 pb-3 text-center text-xs">
-									{t("common.loadingMore")}
+									{t('common.loadingMore')}
 								</p>
 							) : null}
 							{!hasMore && items.length > 0 ? (
 								<p className="text-textcolor/35 pb-3 text-center text-xs">
-									{t("common.noMore")}
+									{t('common.noMore')}
 								</p>
 							) : null}
 						</div>
@@ -260,12 +260,12 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 	);
 }
 
-EbookHighlightsApp.activate = async (api: HostBridgeProps["api"]) => {
-	console.log("[ebook-highlights] activate", api);
+EbookHighlightsApp.activate = async (api: HostBridgeProps['api']) => {
+	console.log('[ebook-highlights] activate', api);
 };
 
 EbookHighlightsApp.deactivate = () => {
-	console.log("[ebook-highlights] deactivate");
+	console.log('[ebook-highlights] deactivate');
 };
 
 export default EbookHighlightsApp;

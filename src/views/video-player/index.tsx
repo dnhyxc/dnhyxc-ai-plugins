@@ -5,11 +5,11 @@
  * 空态 / 播放态共用同一套 vp-wrap 高度链（与改前一致），避免 Fragment 双 wrap 把内容区高度压没。
  * 点选：优先 Host `api.ui.pickLocalFiles`（Tauri 原生对话框 / Web blob）；拖拽仍走 File。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from 'react';
 import type {
 	DragDropAcceptResult,
 	DragDropRejectedFile,
-} from "@/components/design/DragDropFileUpload";
+} from '@/components/design/DragDropFileUpload';
 import {
 	appendPickedVideos,
 	appendVideoFiles,
@@ -17,17 +17,17 @@ import {
 	revokeVideoUrls,
 	type VideoItem,
 	VideoPlayer,
-} from "@/components/design/VideoPlayer";
-import { TooltipProvider } from "@/components/ui";
-import { useHostLocale, useI18n } from "@/hooks";
-import type { Locale } from "@/i18n";
-import { cn } from "@/lib/utils";
+} from '@/components/design/VideoPlayer';
+import { TooltipProvider } from '@/components/ui';
+import { useHostLocale, useI18n } from '@/hooks';
+import type { Locale } from '@/i18n';
+import { cn } from '@/lib/utils';
 import VideoUpload, {
-	type VideoUploadHandle,
 	VIDEO_ACCEPT,
-} from "./components/VideoUpload";
+	type VideoUploadHandle,
+} from './components/VideoUpload';
 /** MF 嵌入 Host 时必须由 expose 入口带上 Tailwind，否则仅 Host 扫到的 utility 生效 */
-import "@/styles.css";
+import '@/styles.css';
 
 type HostPickedLocalFile = {
 	path: string;
@@ -37,7 +37,7 @@ type HostPickedLocalFile = {
 
 type HostBridgeProps = {
 	api: {
-		theme: "light" | "dark";
+		theme: 'light' | 'dark';
 		locale?: Locale;
 		event?: {
 			on: (event: string, handler: (data?: unknown) => void) => void;
@@ -47,7 +47,7 @@ type HostBridgeProps = {
 		ui?: {
 			showToast: (options: {
 				message: string;
-				type?: "success" | "error" | "info";
+				type?: 'success' | 'error' | 'info';
 			}) => void;
 			setAppFullscreen?: (full: boolean) => Promise<void>;
 			pickLocalFiles?: (options?: {
@@ -65,19 +65,19 @@ function rejectToastMessage(
 	rejected: DragDropRejectedFile[],
 	t: (key: string, params?: Record<string, unknown>) => string,
 ): string {
-	const acceptHits = rejected.filter((r) => r.reason.code === "accept");
-	const maxHits = rejected.filter((r) => r.reason.code === "maxCount");
+	const acceptHits = rejected.filter((r) => r.reason.code === 'accept');
+	const maxHits = rejected.filter((r) => r.reason.code === 'maxCount');
 	if (acceptHits.length && !maxHits.length) {
 		return acceptHits.length === 1
-			? t("videoPlayer.rejectAccept", { name: acceptHits[0].file.name })
-			: t("videoPlayer.rejectAcceptMany", { count: acceptHits.length });
+			? t('videoPlayer.rejectAccept', { name: acceptHits[0].file.name })
+			: t('videoPlayer.rejectAcceptMany', { count: acceptHits.length });
 	}
 	if (maxHits.length && !acceptHits.length) {
 		const max =
-			maxHits[0].reason.code === "maxCount" ? maxHits[0].reason.max : 0;
-		return t("videoPlayer.rejectMaxCount", { max });
+			maxHits[0].reason.code === 'maxCount' ? maxHits[0].reason.max : 0;
+		return t('videoPlayer.rejectMaxCount', { max });
 	}
-	return t("videoPlayer.rejectMixed", { count: rejected.length });
+	return t('videoPlayer.rejectMixed', { count: rejected.length });
 }
 
 const VideoPlayerApp = ({ api }: HostBridgeProps) => {
@@ -91,7 +91,7 @@ const VideoPlayerApp = ({ api }: HostBridgeProps) => {
 			if (result.rejected.length) {
 				api.ui?.showToast({
 					message: rejectToastMessage(result.rejected, t),
-					type: "error",
+					type: 'error',
 				});
 			}
 			if (!result.accepted.length) return;
@@ -109,7 +109,7 @@ const VideoPlayerApp = ({ api }: HostBridgeProps) => {
 		const picked = await pick({
 			accept: VIDEO_ACCEPT,
 			multiple: true,
-			title: t("videoPlayer.selectVideo"),
+			title: t('videoPlayer.selectVideo'),
 		});
 		if (!picked?.length) return null;
 		setVideos((prev) => appendPickedVideos(picked.slice(0, remain), prev));
@@ -133,8 +133,8 @@ const VideoPlayerApp = ({ api }: HostBridgeProps) => {
 					<div
 						className={cn(
 							hasVideos
-								? "sr-only"
-								: "relative flex h-full w-full justify-center overflow-hidden rounded-md text-center contain-[layout_paint]",
+								? 'sr-only'
+								: 'relative flex h-full w-full justify-center overflow-hidden rounded-md text-center contain-[layout_paint]',
 						)}
 						aria-hidden={hasVideos}
 					>
@@ -161,12 +161,12 @@ const VideoPlayerApp = ({ api }: HostBridgeProps) => {
 	);
 };
 
-VideoPlayerApp.activate = async (api: HostBridgeProps["api"]) => {
-	console.log("[video-player] activate", api);
+VideoPlayerApp.activate = async (api: HostBridgeProps['api']) => {
+	console.log('[video-player] activate', api);
 };
 
-VideoPlayerApp.deactivate = (api: HostBridgeProps["api"]) => {
-	console.log("[video-player] deactivate", api);
+VideoPlayerApp.deactivate = (api: HostBridgeProps['api']) => {
+	console.log('[video-player] deactivate', api);
 };
 
 export default VideoPlayerApp;

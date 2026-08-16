@@ -1,12 +1,12 @@
-import Loading from "@design/Loading";
-import { NotePreview } from "@design/NotePreview";
+import Loading from '@design/Loading';
+import { NotePreview } from '@design/NotePreview';
 import {
 	Btn,
 	type Editor,
 	getDocTitleText,
 	RichEditor,
 	richEditorLocaleOf,
-} from "@design/RichEditor";
+} from '@design/RichEditor';
 import {
 	Eye,
 	FileDown,
@@ -15,29 +15,29 @@ import {
 	Save,
 	SquarePen,
 	Trash2,
-} from "lucide-react";
-import { observer } from "mobx-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Confirm from "@/components/design/Confirm";
+} from 'lucide-react';
+import { observer } from 'mobx-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Confirm from '@/components/design/Confirm';
 import {
 	ResizableHandle,
 	ResizablePanel,
 	ResizablePanelGroup,
-} from "@/components/ui/resizable";
-import { useHostLocale, useI18n } from "@/hooks";
-import type { Locale } from "@/i18n";
-import { cn } from "@/lib/utils";
-import useStore from "@/store";
-import type { HostHttp } from "./api";
-import { LargeNoteEditor, type LargeNoteSaveApi } from "./components/Editor";
-import { NotesListPanel } from "./components/NotesListPanel";
-import { WindowedPreviewBody } from "./components/PreviewBody";
-import { isLargeNoteHtml } from "./utils";
-import "@/styles.css";
+} from '@/components/ui/resizable';
+import { useHostLocale, useI18n } from '@/hooks';
+import type { Locale } from '@/i18n';
+import { cn } from '@/lib/utils';
+import useStore from '@/store';
+import type { HostHttp } from './api';
+import { LargeNoteEditor, type LargeNoteSaveApi } from './components/Editor';
+import { NotesListPanel } from './components/NotesListPanel';
+import { WindowedPreviewBody } from './components/PreviewBody';
+import { isLargeNoteHtml } from './utils';
+import '@/styles.css';
 
 type HostBridgeProps = {
 	api: {
-		theme: "light" | "dark";
+		theme: 'light' | 'dark';
 		locale?: Locale;
 		event?: {
 			on: (event: string, handler: (data?: unknown) => void) => void;
@@ -48,7 +48,7 @@ type HostBridgeProps = {
 		ui?: {
 			showToast: (options: {
 				message: string;
-				type?: "success" | "error" | "info";
+				type?: 'success' | 'error' | 'info';
 			}) => void;
 			downloadBlob?: (options: {
 				fileName: string;
@@ -74,7 +74,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const pagedSaveRef = useRef<LargeNoteSaveApi | null>(null);
 	const savingRef = useRef(false);
 	const previewRef = useRef(store.preview);
-	const baselineHtmlRef = useRef("");
+	const baselineHtmlRef = useRef('');
 	const [readyKey, setReadyKey] = useState<string | null>(null);
 	const [mountEditor, setMountEditor] = useState(false);
 	const [dirty, setDirty] = useState(false);
@@ -82,7 +82,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	previewRef.current = store.preview;
 
 	const toast = useCallback(
-		(message: string, type: "success" | "error" | "info" = "info") => {
+		(message: string, type: 'success' | 'error' | 'info' = 'info') => {
 			api.ui?.showToast({ message, type });
 		},
 		[api.ui],
@@ -92,7 +92,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		const paged = pagedSaveRef.current;
 		if (paged) return paged.getHTML();
 		const editor = editorRef.current;
-		if (!editor || editor.isDestroyed) return "";
+		if (!editor || editor.isDestroyed) return '';
 		return editor.getHTML();
 	}, []);
 
@@ -112,14 +112,14 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const focusTitle = useCallback(() => {
 		const editor = editorRef.current;
 		if (!editor || editor.isDestroyed) return;
-		const root = editor.view.dom.closest(".rich-editor");
+		const root = editor.view.dom.closest('.rich-editor');
 		if (!root) return;
 		const vp = root.querySelector(
 			'[data-slot="scroll-area-viewport"]',
 		) as HTMLElement | null;
 		if (vp) vp.scrollTop = 0;
 		const input = root.querySelector(
-			".rich-editor-note-title input",
+			'.rich-editor-note-title input',
 		) as HTMLInputElement | null;
 		input?.focus();
 	}, []);
@@ -143,7 +143,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		const title = getDocTitleText(editor.state.doc).trim();
 		const ok = await store.saveNote({
 			title,
-			text: editor.getText({ blockSeparator: "\n\n" }).trim(),
+			text: editor.getText({ blockSeparator: '\n\n' }).trim(),
 			html: editor.getHTML(),
 			dirty,
 		});
@@ -153,14 +153,14 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "s") return;
+			if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 's') return;
 			if (previewRef.current) return;
 			e.preventDefault();
 			if (savingRef.current) return;
 			void onSave();
 		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
+		window.addEventListener('keydown', onKeyDown);
+		return () => window.removeEventListener('keydown', onKeyDown);
 	}, [onSave]);
 
 	const listToggleBtn = useCallback(
@@ -168,8 +168,8 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 			<Btn
 				title={
 					store.listOpen
-						? t("learningNotes.closeList")
-						: t("learningNotes.openList")
+						? t('learningNotes.closeList')
+						: t('learningNotes.openList')
 				}
 				onClick={() => store.toggleListOpen()}
 			>
@@ -182,16 +182,16 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const toolbarExtra = useMemo(
 		() => (
 			<>
-				<Btn title={t("learningNotes.new")} onClick={() => store.openNew()}>
+				<Btn title={t('learningNotes.new')} onClick={() => store.openNew()}>
 					<FilePenLine size={15} />
 				</Btn>
 				<Btn
 					title={
 						store.saving
-							? t("learningNotes.saving")
+							? t('learningNotes.saving')
 							: store.editingId
-								? t("learningNotes.update")
-								: t("learningNotes.save")
+								? t('learningNotes.update')
+								: t('learningNotes.save')
 					}
 					onClick={() => void onSave()}
 					disabled={store.saving}
@@ -207,7 +207,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				</Btn>
 				{store.editingId ? (
 					<Btn
-						title={t("learningNotes.preview")}
+						title={t('learningNotes.preview')}
 						onClick={() => {
 							const id = store.editingId;
 							if (id) void store.openPreview(id);
@@ -226,13 +226,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const previewHeaderExtra = useMemo(
 		() => (
 			<>
-				<Btn title={t("learningNotes.new")} onClick={() => store.openNew()}>
+				<Btn title={t('learningNotes.new')} onClick={() => store.openNew()}>
 					<FilePenLine size={15} />
 				</Btn>
 				{previewOwned ? (
 					<>
 						<Btn
-							title={t("learningNotes.edit")}
+							title={t('learningNotes.edit')}
 							disabled={store.loadingDetail}
 							onClick={() => {
 								if (store.preview) store.openEdit(store.preview);
@@ -241,7 +241,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 							<SquarePen size={15} />
 						</Btn>
 						<Btn
-							title={t("learningNotes.delete")}
+							title={t('learningNotes.delete')}
 							onClick={() => {
 								if (store.preview) store.requestDelete(store.preview.id);
 							}}
@@ -251,8 +251,8 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 						<Btn
 							title={
 								store.exportingDocx
-									? t("learningNotes.exportingDocx")
-									: t("learningNotes.exportDocx")
+									? t('learningNotes.exportingDocx')
+									: t('learningNotes.exportDocx')
 							}
 							disabled={store.exportingDocx || store.loadingDetail}
 							onClick={() => void store.exportPreviewDocx()}
@@ -295,14 +295,14 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	return (
 		<div
 			className={cn(
-				"bg-theme/5 text-textcolor flex h-full min-h-0 min-w-0 flex-col text-sm rounded-md",
+				'bg-theme/5 text-textcolor flex h-full min-h-0 min-w-0 flex-col text-sm rounded-md',
 			)}
 		>
 			<Confirm
 				open={store.confirmOpen}
 				onOpenChange={(open) => store.setConfirmOpen(open)}
-				title={t("learningNotes.deleteConfirmTitle")}
-				description={t("learningNotes.deleteConfirmDesc")}
+				title={t('learningNotes.deleteConfirmTitle')}
+				description={t('learningNotes.deleteConfirmDesc')}
 				onConfirm={() => void store.confirmDelete()}
 			/>
 			<Confirm
@@ -310,13 +310,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				onOpenChange={(open) => store.setVisibilityConfirmOpen(open)}
 				title={
 					store.pendingVisibility?.isPublic
-						? t("learningNotes.publicConfirmTitle")
-						: t("learningNotes.privateConfirmTitle")
+						? t('learningNotes.publicConfirmTitle')
+						: t('learningNotes.privateConfirmTitle')
 				}
 				description={
 					store.pendingVisibility?.isPublic
-						? t("learningNotes.publicConfirmDesc")
-						: t("learningNotes.privateConfirmDesc")
+						? t('learningNotes.publicConfirmDesc')
+						: t('learningNotes.privateConfirmDesc')
 				}
 				onConfirm={() => void store.confirmVisibility()}
 			/>
@@ -348,11 +348,11 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 						{!store.preview ? (
 							<>
 								{mountEditor ? (
-									useLarge && typeof store.editorInitial === "string" ? (
+									useLarge && typeof store.editorInitial === 'string' ? (
 										<LargeNoteEditor
 											key={editorKey}
 											defaultContent={store.editorInitial}
-											placeholder={t("learningNotes.placeholder")}
+											placeholder={t('learningNotes.placeholder')}
 											locale={editorLocale}
 											onReady={(e, save) => {
 												editorRef.current = e;
@@ -371,7 +371,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 											key={editorKey}
 											defaultContent={store.editorInitial}
 											autofocus="end"
-											placeholder={t("learningNotes.placeholder")}
+											placeholder={t('learningNotes.placeholder')}
 											locale={editorLocale}
 											showCharCount={false}
 											onCreate={(e) => {
@@ -429,12 +429,12 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	);
 }
 
-LearningNotesApp.activate = async (api: HostBridgeProps["api"]) => {
-	console.log("[learning-notes] activate", api);
+LearningNotesApp.activate = async (api: HostBridgeProps['api']) => {
+	console.log('[learning-notes] activate', api);
 };
 
 LearningNotesApp.deactivate = () => {
-	console.log("[learning-notes] deactivate");
+	console.log('[learning-notes] deactivate');
 };
 
 export default observer(LearningNotesApp);

@@ -34,7 +34,7 @@ function toastUnlessHostHttp(toast: ToastFn, e: unknown, t: TFn) {
  */
 class LearningNotesStore {
 	private api: NotesApi | null = null;
-	private toast: ToastFn = () => { };
+	private toast: ToastFn = () => {};
 	private t: TFn = translateSync;
 	/** Host 透传的 downloadBlob（Web / Tauri2）；独立预览可由 mock 注入 */
 	private downloadBlob: HostDownloadBlob | null = null;

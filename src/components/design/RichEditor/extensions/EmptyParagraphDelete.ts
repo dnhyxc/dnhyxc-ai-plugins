@@ -47,7 +47,7 @@ export const EmptyParagraphDelete = Extension.create({
 		return {
 			Backspace: ({ editor }) => {
 				const hit = emptyParagraphAt(editor.state.selection);
-				if (!hit || hit.$from.parentOffset !== 0) return false;
+				if (hit?.$from?.parentOffset !== 0) return false;
 				if (!canRemoveBlock(editor.state.doc)) return false;
 
 				const { from, to } = hit;

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# 在提交前检查暂存区：格式/ lint 有问题则退出非零，禁止提交（不写回文件）
+echo "Running Biome check on staged files..."
+pnpm exec biome check --staged --no-errors-on-unmatched

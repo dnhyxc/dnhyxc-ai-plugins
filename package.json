@@ -28,7 +28,7 @@
 		"check:staged": "biome check --staged --no-errors-on-unmatched --error-on-warnings",
 		"check:verify": "biome check --no-errors-on-unmatched --error-on-warnings",
 		"format": "biome format --write",
-		"prepare": "husky install",
+		"prepare": "husky install && node scripts/link-biome-lsp.mjs",
 		"commit": "git-cz"
 	},
 	"dependencies": {

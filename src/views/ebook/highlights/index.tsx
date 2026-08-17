@@ -177,7 +177,7 @@ function EbookHighlightsApp({ api }: HostBridgeProps) {
 		);
 		io.observe(target);
 		return () => io.disconnect();
-	}, [fetchPage, hasMore, loading, loadingMore, pageNo, items.length]);
+	}, [fetchPage, hasMore, loading, loadingMore, pageNo]);
 
 	const onOpen = (row: Highlight) => {
 		const cfi = row.cfiRange?.trim();

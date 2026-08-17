@@ -178,7 +178,7 @@ function IdeasListApp({ api }: HostBridgeProps) {
 		);
 		io.observe(target);
 		return () => io.disconnect();
-	}, [fetchPage, hasMore, loading, loadingMore, pageNo, items.length]);
+	}, [fetchPage, hasMore, loading, loadingMore, pageNo]);
 
 	const onOpen = (thought: Thought) => {
 		const cfi = thought.cfiRange?.trim();

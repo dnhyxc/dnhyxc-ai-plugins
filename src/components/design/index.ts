@@ -1,7 +1,11 @@
 export { default as DragDropFileUpload } from './DragDropFileUpload';
 export * from './Loading';
-export type { NotePreviewProps } from './NotePreview';
-export { NotePreview, stripNoteTitleHtml } from './NotePreview';
+export type { HostDownloadBlob, NotePreviewProps } from './NotePreview';
+export {
+	NotePreview,
+	stripNoteTitleHtml,
+	useNoteImagePreview,
+} from './NotePreview';
 export { default as HoverPopover } from './Popover';
 export type { RatePanelProps } from './RatePanel';
 export { RatePanel } from './RatePanel';

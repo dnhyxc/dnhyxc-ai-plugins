@@ -12,6 +12,16 @@ const zhCN: Record<string, string> = {
 	'common.loadedCount': '已加载 {loaded} 条/共 {total} 条',
 	'common.toggleLanguage': '切换语言',
 	'common.connectingHost': '连接 Host…',
+	'common.download': '下载',
+
+	'imagePreview.title': '图片预览',
+	'imagePreview.zoomIn': '放大',
+	'imagePreview.zoomOut': '缩小',
+	'imagePreview.rotate': '旋转',
+	'imagePreview.reset': '重置',
+	'imagePreview.prev': '上一张',
+	'imagePreview.next': '下一张',
+	'imagePreview.close': '关闭',
 
 	'layout.brand': 'dnhyxc-ai-plugins',
 	'layout.home': '首页',

@@ -10,7 +10,12 @@ import {
 	decoratePreviewHtml,
 	preserveEmptyParagraphs,
 } from '@/components/design/NotePreview/previewHtml';
+import {
+	type HostDownloadBlob,
+	useNoteImagePreview,
+} from '@/components/design/NotePreview/useNoteImagePreview';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
 import {
 	createLargeNoteDoc,
@@ -25,17 +30,20 @@ import {
 type Props = {
 	html: string;
 	className?: string;
+	downloadBlob?: HostDownloadBlob;
 };
 
 /**
  * 长文只读预览：与 LargeNoteEditor 同一套滚动窗口，避免全文 DOM 拖垮左侧列表滚动。
  */
-export function WindowedPreviewBody({ html, className }: Props) {
+export function WindowedPreviewBody({ html, className, downloadBlob }: Props) {
+	const { t } = useI18n();
 	const boot = useMemo(() => createLargeNoteDoc(html), [html]);
 	const docRef = useRef<LargeNoteDoc>(boot.doc);
 	const originRef = useRef(0);
 	const shiftingRef = useRef(false);
 	const scrollRafRef = useRef(0);
+	const bodyRef = useRef<HTMLDivElement>(null);
 
 	const [origin, setOrigin] = useState(0);
 	const [offsetY, setOffsetY] = useState(0);
@@ -52,6 +60,14 @@ export function WindowedPreviewBody({ html, className }: Props) {
 			flushLeadingImg: origin === 0,
 		});
 	}, [boot.doc, origin]);
+
+	const { noteImagePreviewModal } = useNoteImagePreview({
+		rootRef: bodyRef,
+		html,
+		downloadBlob,
+		t,
+		rebindWhen: `${origin}:${windowHtml.length}`,
+	});
 
 	const applyOrigin = useCallback((nextOrigin: number) => {
 		const doc = docRef.current;
@@ -114,27 +130,35 @@ export function WindowedPreviewBody({ html, className }: Props) {
 	);
 
 	return (
-		<ScrollArea
-			className={cn(
-				'rich-editor-body note-preview-static text-textcolor min-h-0 flex-1',
-				className,
-			)}
-			onScroll={windowed ? onScroll : undefined}
-		>
-			{windowed ? (
-				<div className="relative w-full" style={{ height: bodyH }}>
+		<>
+			<ScrollArea
+				className={cn(
+					'rich-editor-body note-preview-static text-textcolor min-h-0 flex-1',
+					className,
+				)}
+				onScroll={windowed ? onScroll : undefined}
+			>
+				{windowed ? (
 					<div
-						className="tiptap note-preview-tiptap ProseMirror absolute top-0 right-0 left-0"
-						style={{ transform: `translateY(${offsetY}px)` }}
+						ref={bodyRef}
+						className="relative w-full"
+						style={{ height: bodyH }}
+					>
+						<div
+							className="tiptap note-preview-tiptap ProseMirror absolute top-0 right-0 left-0"
+							style={{ transform: `translateY(${offsetY}px)` }}
+							dangerouslySetInnerHTML={{ __html: windowHtml }}
+						/>
+					</div>
+				) : (
+					<div
+						ref={bodyRef}
+						className="tiptap note-preview-tiptap ProseMirror relative w-full"
 						dangerouslySetInnerHTML={{ __html: windowHtml }}
 					/>
-				</div>
-			) : (
-				<div
-					className="tiptap note-preview-tiptap ProseMirror relative w-full"
-					dangerouslySetInnerHTML={{ __html: windowHtml }}
-				/>
-			)}
-		</ScrollArea>
+				)}
+			</ScrollArea>
+			{noteImagePreviewModal}
+		</>
 	);
 }

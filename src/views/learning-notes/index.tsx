@@ -401,10 +401,12 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 										title={store.preview.title}
 										headerExtra={previewHeaderExtra}
 										loading={store.loadingDetail}
+										downloadBlob={api.ui?.downloadBlob}
 									>
 										<WindowedPreviewBody
 											key={store.preview.id}
 											html={store.preview.html}
+											downloadBlob={api.ui?.downloadBlob}
 										/>
 									</NotePreview>
 								) : (
@@ -413,6 +415,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 										html={store.preview.html}
 										headerExtra={previewHeaderExtra}
 										loading={store.loadingDetail}
+										downloadBlob={api.ui?.downloadBlob}
 									/>
 								)}
 								{store.loadingDetail ? (

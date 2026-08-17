@@ -12,6 +12,16 @@ const enUS: Record<string, string> = {
 	'common.loadedCount': 'Loaded {loaded} / {total}',
 	'common.toggleLanguage': 'Toggle language',
 	'common.connectingHost': 'Connecting to host…',
+	'common.download': 'Download',
+
+	'imagePreview.title': 'Image preview',
+	'imagePreview.zoomIn': 'Zoom in',
+	'imagePreview.zoomOut': 'Zoom out',
+	'imagePreview.rotate': 'Rotate',
+	'imagePreview.reset': 'Reset',
+	'imagePreview.prev': 'Previous',
+	'imagePreview.next': 'Next',
+	'imagePreview.close': 'Close',
 
 	'layout.brand': 'micro',
 	'layout.home': 'Home',

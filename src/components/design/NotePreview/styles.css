@@ -14,6 +14,10 @@
 	user-select: text;
 }
 
+.note-preview-tiptap img {
+	cursor: zoom-in;
+}
+
 .note-preview-editor .rich-editor-note-title,
 .note-preview-editor [data-node-view-wrapper].rich-editor-note-title {
 	display: none !important;

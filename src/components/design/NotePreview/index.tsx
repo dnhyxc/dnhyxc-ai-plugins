@@ -1,11 +1,15 @@
-import { type ReactNode, useMemo } from 'react';
+import { Component } from 'lucide-react';
+import { type ReactNode, useMemo, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
 import '../RichEditor/styles.css';
 import { preparePreviewBody } from './previewHtml';
 import './styles.css';
-import { Component } from 'lucide-react';
+import {
+	type HostDownloadBlob,
+	useNoteImagePreview,
+} from './useNoteImagePreview';
 
 export type NotePreviewProps = {
 	/** 顶栏标题（替代编辑器 toolbar） */
@@ -23,6 +27,11 @@ export type NotePreviewProps = {
 	bodyClassName?: string;
 	emptyText?: string;
 	loading?: boolean;
+	/**
+	 * 点击图片预览时的下载实现。
+	 * 嵌入 Host 用 api.ui.downloadBlob；独立预览用 mockHost 同源实现。
+	 */
+	downloadBlob?: HostDownloadBlob;
 };
 
 export {
@@ -32,6 +41,9 @@ export {
 	splitPreviewBlocks,
 	stripNoteTitleHtml,
 } from './previewHtml';
+
+export type { HostDownloadBlob } from './useNoteImagePreview';
+export { useNoteImagePreview } from './useNoteImagePreview';
 
 /**
  * 笔记只读预览：与编辑态同一套 ScrollArea + RichEditor 正文样式（静态 HTML，不挂 TipTap）。
@@ -47,6 +59,7 @@ export function NotePreview({
 	bodyClassName,
 	emptyText,
 	loading,
+	downloadBlob,
 }: NotePreviewProps) {
 	const { t } = useI18n();
 	const empty = emptyText ?? t('common.emptyContent');
@@ -54,6 +67,15 @@ export function NotePreview({
 		() => (html ? preparePreviewBody(html) : ''),
 		[html],
 	);
+	const bodyRef = useRef<HTMLDivElement>(null);
+	const { noteImagePreviewModal } = useNoteImagePreview({
+		rootRef: bodyRef,
+		html: children == null ? html : undefined,
+		downloadBlob,
+		t,
+		enabled: children == null,
+		rebindWhen: bodyHtml,
+	});
 
 	return (
 		<div
@@ -92,6 +114,7 @@ export function NotePreview({
 					)}
 				>
 					<div
+						ref={bodyRef}
 						className="tiptap note-preview-tiptap ProseMirror"
 						// tipTap 导出 HTML；预览只读
 						dangerouslySetInnerHTML={{ __html: bodyHtml }}
@@ -105,6 +128,7 @@ export function NotePreview({
 			)}
 
 			{footer ? <div className="shrink-0">{footer}</div> : null}
+			{noteImagePreviewModal}
 		</div>
 	);
 }

@@ -1,5 +1,7 @@
 # 笔记预览（NotePreview）实现文档
 
+> **延伸阅读**：[笔记预览图片点击交互增强](./note-preview/image-preview-integration.md) — 基于本文档基础，新增 ImagePreview 组件实现图片缩放/旋转/拖拽/下载/图库导航能力。
+
 ## 一、概述
 
 `NotePreview` 是笔记模块的**只读预览组件**，用于在用户浏览笔记列表时展示笔记的静态内容。它与编辑态（`RichEditor`）共享同一套样式系统（`styles.css`），但不挂载 TipTap 编辑器实例，以纯 HTML 的方式渲染，确保轻量、快速。

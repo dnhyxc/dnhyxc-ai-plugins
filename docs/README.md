@@ -14,6 +14,7 @@
 | [video-player.md](./video-player.md) | **视频播放器 (VideoPlayer)** | xgplayer + 自定义控制条 | ~2800 行 |
 | [drag-drop-file-upload.md](./drag-drop-file-upload.md) | **拖拽文件上传 (DragDropFileUpload)** | Headless Hook + UI 双层架构 | ~550 行 |
 | [note-preview.md](./note-preview.md) | **笔记预览 (NotePreview)** | 静态 HTML 渲染 + CSS Containment | ~200 行 |
+| [note-preview/image-preview-integration.md](./note-preview/image-preview-integration.md) | **笔记预览图片交互增强** | ImagePreview + Model + 事件委托 | ~900 行（新增） |
 
 ### 📚 业务功能实现
 
@@ -68,18 +69,21 @@
 
 ```
 docs/
-├── README.md              ← 你在这里
-├── rich-editor.md         ← 富文本编辑器（最复杂组件）
-├── video-player.md        ← 视频播放器（含自定义控制条）
-├── learning-notes.md     ← 学习笔记（完整 CRUD + MobX）
-├── ebook-ideas.md        ← 想法列表（分页懒加载）
-├── ebook-highlights.md   ← 划线列表（同构设计）
-├── drag-drop-file-upload.md ← 拖拽上传（Headless Hook）
-├── note-preview.md       ← 笔记预览（HTML 处理管线）
-├── i18n-system.md        ← 国际化（Host 隔离）
-├── design-system.md      ← 设计系统（组件库）
-├── RichEditor-guide.md   ← 使用指南（补充）
-└── tiptap.md             ← 技术笔记（补充）
+├── README.md                              ← 你在这里
+├── rich-editor.md                         ← 富文本编辑器（最复杂组件）
+├── video-player.md                        ← 视频播放器（含自定义控制条）
+├── learning-notes.md                      ← 学习笔记（完整 CRUD + MobX）
+├── ebook-ideas.md                        ← 想法列表（分页懒加载）
+├── ebook-highlights.md                    ← 划线列表（同构设计）
+├── drag-drop-file-upload.md               ← 拖拽上传（Headless Hook）
+├── note-preview.md                        ← 笔记预览（HTML 处理管线）
+├── note-preview/
+│   ├── README.md                          ← 功能域索引
+│   └── image-preview-integration.md       ← 图片预览交互增强
+├── i18n-system.md                         ← 国际化（Host 隔离）
+├── design-system.md                       ← 设计系统（组件库）
+├── RichEditor-guide.md                    ← 使用指南（补充）
+└── tiptap.md                              ← 技术笔记（补充）
 ```
 
 ## 如何贡献

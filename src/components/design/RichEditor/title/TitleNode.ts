@@ -213,7 +213,7 @@ export function indentEditor(editor: Editor): boolean {
 /** 标题 input 按 Enter / Tab：跳到正文末尾 */
 export function focusAfterTitle(editor: Editor) {
 	const title = editor.state.doc.firstChild;
-	if (!title || title.type.name !== 'title') {
+	if (title?.type.name !== 'title') {
 		editor.commands.focus('end');
 		return;
 	}

@@ -295,7 +295,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	return (
 		<div
 			className={cn(
-				'bg-theme/5 text-textcolor flex h-full min-h-0 min-w-0 flex-col text-sm rounded-md',
+				'bg-theme-background text-textcolor flex h-full min-h-0 min-w-0 flex-col text-sm rounded-md',
 			)}
 		>
 			<Confirm

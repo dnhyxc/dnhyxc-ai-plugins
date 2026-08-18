@@ -47,7 +47,7 @@ export function NoteTitleField({
 		>
 			{/* shell/badge 关键几何靠 styles.css；勿用 -inset（四边钉死，utility 未齐时会拉满盖住输入框） */}
 			<div className="rich-editor-note-title-shell relative flex flex-col gap-2 border border-theme/5 bg-theme/5 p-3 pr-0 pt-9 rounded-md">
-				<div className="rich-editor-note-title-badge absolute -top-0.5 -left-0.5 flex h-6 items-center gap-2 border border-theme/5 bg-theme/20 pl-3 pr-3 text-theme/80 rounded-tl-md rounded-br-md">
+				<div className="rich-editor-note-title-badge absolute -top-0.5 -left-0.5 flex h-6 items-center gap-2 bg-teal-500/85 pl-3 pr-3 text-white rounded-tl-md rounded-br-md">
 					<NotebookPen className="size-4 shrink-0" />
 					<span className="text-sm font-medium whitespace-nowrap">
 						{t('learningNotes.titleBadge')}

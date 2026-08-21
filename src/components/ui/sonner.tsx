@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import {
 	type ExternalToast,
 	Toaster as Sonner,
@@ -15,6 +16,9 @@ import {
 	toast,
 } from 'sonner';
 import { cn } from '@/lib/utils';
+
+/** 高于 Dialog/Sheet 等 `z-50`；须挂在 body（见 Toaster），勿困在 `#root` 的 fixed 层叠上下文内 */
+const TOASTER_Z_INDEX = 999999999;
 
 type ToastType = 'success' | 'error' | 'warning' | 'info' | 'loading' | 'start';
 
@@ -105,7 +109,7 @@ const Toast = ({
 	toast.custom(
 		(toastId) => {
 			return (
-				<div className="group relative flex flex-col justify-center min-h-13 w-80 bg-theme-background/80 shadow-lg rounded-md py-2 pl-3 pr-9">
+				<div className="group relative flex flex-col justify-center min-h-13 w-80 bg-theme-background/80 shadow-lg rounded-md py-2 pl-3 pr-9 pointer-events-auto">
 					<button
 						type="button"
 						className={cn(
@@ -120,7 +124,7 @@ const Toast = ({
 					>
 						<X className="size-4" strokeWidth={2} aria-hidden />
 					</button>
-					<div className="flex items-center">
+					<div className="flex items-start">
 						<div className="w-6 flex justify-center items-center">
 							{type === 'success' && (
 								<CircleCheckIcon color="var(--color-green-500)" />
@@ -187,6 +191,10 @@ const Toast = ({
  *
  * **排版方向 `dir`**：`'ltr'` | `'rtl'` | `'auto'`。
  *
+ * **挂载**：经 `createPortal` 挂到 `document.body`。`#root` 为 `position: fixed` 时会自建层叠上下文，
+ * 若 Toaster 留在 `#root` 内，即便 z-index 再高也会被 Radix Dialog（portal 到 body 的 `z-50`）挡住。
+ * federation-kit 已跳过 `data-sonner-toaster` 的 portal 收编，挂 body 安全。
+ *
  * @example
  * ```tsx
  * <Toaster position="bottom-right" expand swipeDirections={['bottom', 'right']} />
@@ -202,11 +210,13 @@ const Toaster = (props: ToasterProps) => {
 		'--border-radius': 'var(--radius)',
 	} as React.CSSProperties;
 
-	return (
+	if (typeof document === 'undefined') return null;
+
+	return createPortal(
 		<Sonner
 			{...props}
 			theme={theme as ToasterProps['theme']}
-			className={cn('toaster group', props.className)}
+			className={cn('toaster group pointer-events-auto', props.className)}
 			duration={props.duration ?? DEFAULT_TOAST_DURATION_MS}
 			offset={props.offset ?? 30}
 			position={props.position ?? DEFAULT_TOAST_POSITION}
@@ -233,8 +243,14 @@ const Toaster = (props: ToasterProps) => {
 				),
 				loading: <Loader2Icon className="size-4 animate-spin" />,
 			}}
-			style={{ ...baseStyle, ...props.style }}
-		/>
+			style={{
+				...baseStyle,
+				pointerEvents: 'auto',
+				zIndex: TOASTER_Z_INDEX,
+				...props.style,
+			}}
+		/>,
+		document.body,
 	);
 };
 

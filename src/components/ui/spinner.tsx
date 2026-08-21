@@ -1,13 +1,13 @@
-import { Bubbles } from 'lucide-react';
+import { Fan } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
 	return (
-		<Bubbles
+		<Fan
 			role="status"
 			aria-label="Loading"
-			className={cn('size-5 pl-px animate-spin text-default', className)}
+			className={cn('size-5 animate-spin text-default', className)}
 			{...props}
 		/>
 	);

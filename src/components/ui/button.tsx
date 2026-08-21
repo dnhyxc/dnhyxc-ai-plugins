@@ -1,7 +1,6 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
-import type * as React from 'react';
-
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Spinner } from './spinner';
 
@@ -10,18 +9,21 @@ const buttonVariants = cva(
 	{
 		variants: {
 			variant: {
-				default: 'text-default bg-theme hover:bg-theme/80',
+				default: 'text-white bg-teal-500/80 hover:bg-teal-500',
 				destructive:
 					'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
 				outline:
-					'border border-theme/20 text-theme shadow-xs hover:bg-theme/10 dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
-				secondary: 'bg-theme/20 text-textcolor hover:bg-theme/30',
-				ghost: 'hover:bg-theme/10 dark:hover:bg-accent/50',
+					'border border-teal-500/80 bg-teal-500/10 text-textcolor shadow-xs hover:bg-teal-500/20 dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+				secondary: 'bg-teal-500/20 text-textcolor hover:bg-teal-500/30',
+				ghost: 'hover:bg-teal-500/10 hover::text-textcolor',
 				link: 'text-textcolor underline-offset-4 hover:text-teal-500',
-				loading: 'bg-theme/30 hover:bg-theme/30',
+				dynamic:
+					'relative overflow-hidden hover:bg-teal-500/10 before:pointer-events-none before:absolute before:inset-0 before:z-0 before:content-[""] before:-translate-x-full before:bg-linear-to-r before:from-transparent before:via-white/30 before:to-transparent dark:before:via-white/12 before:transition-transform before:duration-500 before:ease-out hover:before:translate-x-full [&>*]:relative [&>*]:z-[1]',
+				loading: 'bg-teal-500/30 hover:bg-teal-500/30',
 			},
 			size: {
 				default: 'h-9 px-4 py-2 has-[>svg]:px-3 pb-2.5',
+				// 对称竖直内边距：原先仅 pb-0.5 会在 h-8 内把内容顶偏上，底部易露出一条异色缝
 				sm: 'h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5',
 				lg: 'h-10 rounded-md px-6 has-[>svg]:px-4',
 				icon: 'size-9',

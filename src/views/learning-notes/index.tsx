@@ -28,6 +28,7 @@ import { useHostLocale, useI18n } from '@/hooks';
 import type { Locale } from '@/i18n';
 import { cn } from '@/lib/utils';
 import useStore from '@/store';
+import learningNotesStore from '@/store/learningNotes';
 import type { HostHttp } from './api';
 import { LargeNoteEditor, type LargeNoteSaveApi } from './components/Editor';
 import { NotesListPanel } from './components/NotesListPanel';
@@ -113,22 +114,43 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		if (wasDirty && !nextDirty) {
 			void store.settleUploadSessionIfNeeded(html);
 		}
-	}, [currentHtml, store]);
+	}, [currentHtml]);
 
 	useEffect(() => {
 		store.bind(api.http, toast, t, api.ui?.downloadBlob);
-	}, [api.http, api.ui?.downloadBlob, store, toast, t]);
+	}, [api.http, api.ui?.downloadBlob, toast, t]);
 
-	/** 仅 pagehide（刷新/关页）时 discard；编辑中切后台不处理 */
+	useEffect(() => {
+		store.registerEditorSnapshot(() => {
+			if (store.preview) return null;
+			const paged = pagedSaveRef.current;
+			if (paged) {
+				return {
+					title: paged.getTitle(),
+					html: paged.getHTML(),
+					text: paged.getText(),
+					dirty: dirtyRef.current,
+				};
+			}
+			const editor = editorRef.current;
+			if (!editor || editor.isDestroyed) return null;
+			return {
+				title: getDocTitleText(editor.state.doc).trim(),
+				html: editor.getHTML(),
+				text: editor.getText({ blockSeparator: '\n\n' }).trim(),
+				dirty: dirtyRef.current,
+			};
+		});
+		return () => store.registerEditorSnapshot(null);
+	}, [store.preview]);
+
+	/** 刷新/关页/离开 Host 路由：keepalive 自动保存 */
 	useEffect(() => {
 		if (store.preview) return;
-		const sid = store.uploadSessionId;
-		if (!sid) return;
-
-		const onPageHide = () => store.flushUploadSessionOnPageHide(sid);
+		const onPageHide = () => store.flushNoteOnPageHide();
 		window.addEventListener('pagehide', onPageHide);
 		return () => window.removeEventListener('pagehide', onPageHide);
-	}, [store.preview, store.uploadSessionId, store]);
+	}, [store.preview]);
 
 	const focusTitle = useCallback(() => {
 		const editor = editorRef.current;
@@ -170,7 +192,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		});
 		if (ok) markClean();
 		else if (dirty && !title) focusTitle();
-	}, [focusTitle, markClean, store, dirty, t]);
+	}, [focusTitle, markClean, dirty]);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -197,7 +219,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				<NotebookText size={15} />
 			</Btn>
 		),
-		[store, store.listOpen, t],
+		[store.listOpen, t],
 	);
 
 	const toolbarExtra = useMemo(
@@ -240,7 +262,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				{listToggleBtn()}
 			</>
 		),
-		[dirty, listToggleBtn, onSave, store, store.editingId, store.saving, t],
+		[dirty, listToggleBtn, onSave, store.editingId, store.saving, t],
 	);
 
 	const previewOwned = store.preview?.isOwned !== false;
@@ -288,7 +310,6 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		[
 			listToggleBtn,
 			previewOwned,
-			store,
 			store.exportingDocx,
 			store.loadingDetail,
 			store.preview,
@@ -303,7 +324,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	const onUploadImage = useCallback(
 		(file: File) => store.uploadNoteImage(file),
-		[store],
+		[],
 	);
 
 	// 先画 Loading，下一帧再挂 TipTap，避免长文解析时连遮罩都刷不出来
@@ -465,7 +486,7 @@ LearningNotesApp.activate = async (api: HostBridgeProps['api']) => {
 };
 
 LearningNotesApp.deactivate = () => {
-	console.log('[learning-notes] deactivate');
+	void learningNotesStore.autoSaveIfDirty({ silent: true });
 };
 
 export default observer(LearningNotesApp);

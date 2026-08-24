@@ -85,6 +85,7 @@ const zhCN: Record<string, string> = {
 	'learningNotes.toast.httpDeniedSync': '未授权 HTTP，无法同步笔记',
 	'learningNotes.toast.httpDeniedSave': '未授权 HTTP，无法保存',
 	'learningNotes.toast.saved': '已保存笔记',
+	'learningNotes.toast.autoSaved': '已自动保存',
 	'learningNotes.toast.noSave': '内容未变更，无需更新',
 	'learningNotes.toast.updated': '已更新笔记',
 	'learningNotes.toast.deleted': '已删除',

@@ -8,6 +8,8 @@ import {
 	NOTES_PAGE_SIZE,
 	type Note,
 	type NotesApi,
+	saveNoteKeepalive,
+	settleUploadSessionKeepalive,
 } from '@/views/learning-notes/api';
 import { hasNoteBodyContent } from '@/views/learning-notes/utils/doc';
 
@@ -19,6 +21,14 @@ type HostDownloadBlob = (options: {
 	data: ArrayBuffer | Uint8Array;
 	mimeType?: string;
 }) => Promise<{ ok: boolean; hostToasted: boolean; message?: string }>;
+
+/** 页面注入：读取当前编辑器快照（离页自动保存用） */
+export type NoteEditorSnapshot = {
+	title: string;
+	html: string;
+	text: string;
+	dirty: boolean;
+};
 
 const DOCX_MIME =
 	'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -39,6 +49,7 @@ class LearningNotesStore {
 	private t: TFn = translateSync;
 	/** Host 透传的 downloadBlob（Web / Tauri2）；独立预览可由 mock 注入 */
 	private downloadBlob: HostDownloadBlob | null = null;
+	private getEditorSnapshot: (() => NoteEditorSnapshot | null) | null = null;
 
 	/** 列表（分页累积） */
 	list: Note[] = [];
@@ -85,16 +96,75 @@ class LearningNotesStore {
 		if (t) this.t = t;
 	}
 
-	/**
-	 * 真正离页（刷新/关标签）时 keepalive discard。
-	 * ponytail: 不用 visibilitychange — 桌面端失焦/粘贴/选文件也会 hidden，会误删正文里的图。
-	 * 切笔记/预览/新建由 discardUploadSession 处理，此处不做 cleanup flush。
-	 */
-	flushUploadSessionOnPageHide(sessionId: string): void {
-		const sid = sessionId.trim();
-		if (!sid) return;
-		if (this.uploadSessionId === sid) this.uploadSessionId = null;
-		discardUploadSessionKeepalive(sid);
+	registerEditorSnapshot(fn: (() => NoteEditorSnapshot | null) | null): void {
+		this.getEditorSnapshot = fn;
+	}
+
+	/** 切笔记 / 新建 / 离页前：有改动则静默保存 */
+	async autoSaveIfDirty(opts?: { silent?: boolean }): Promise<boolean> {
+		if (this.saving || this.preview) return false;
+		const snap = this.getEditorSnapshot?.();
+		if (!snap) return false;
+		if (!snap.dirty) {
+			await this.settleUploadSessionIfNeeded(snap.html);
+			return false;
+		}
+		return this.saveNote(
+			{
+				title: snap.title,
+				html: snap.html,
+				text: snap.text,
+				dirty: true,
+			},
+			{ silent: opts?.silent ?? true, auto: true },
+		);
+	}
+
+	/** 离开编辑区：先自动保存，再清 pending 会话 */
+	private async leaveEditor(): Promise<void> {
+		if (this.saving) {
+			await this.waitForSaving();
+		} else {
+			await this.autoSaveIfDirty({ silent: true });
+		}
+		await this.discardUploadSession();
+	}
+
+	private waitForSaving(): Promise<void> {
+		if (!this.saving) return Promise.resolve();
+		return new Promise((resolve) => {
+			const check = () => {
+				if (!this.saving) resolve();
+				else requestAnimationFrame(check);
+			};
+			check();
+		});
+	}
+
+	/** 刷新/关页：keepalive 保存或结算 pending（不用 visibilitychange） */
+	flushNoteOnPageHide(): void {
+		if (this.preview) return;
+		const snap = this.getEditorSnapshot?.();
+		const sid = this.uploadSessionId;
+		if (snap?.dirty && hasNoteBodyContent(snap.html, snap.text)) {
+			saveNoteKeepalive({
+				id: this.editingId,
+				title: snap.title.trim() || this.t('common.untitledNote'),
+				html: snap.html,
+				uploadSessionId: sid,
+			});
+			this.uploadSessionId = null;
+			return;
+		}
+		if (sid && snap) {
+			settleUploadSessionKeepalive(sid, snap.html);
+			if (this.uploadSessionId === sid) this.uploadSessionId = null;
+			return;
+		}
+		if (sid) {
+			discardUploadSessionKeepalive(sid);
+			if (this.uploadSessionId === sid) this.uploadSessionId = null;
+		}
 	}
 
 	get hasMore(): boolean {
@@ -194,8 +264,8 @@ class LearningNotesStore {
 		await this.fetchPage(this.pageNo + 1, true);
 	}
 
-	openNew() {
-		void this.discardUploadSession();
+	async openNew() {
+		await this.leaveEditor();
 		this.preview = null;
 		this.editingId = null;
 		this.uploadSessionId = crypto.randomUUID();
@@ -205,7 +275,7 @@ class LearningNotesStore {
 
 	async openPreview(id: string): Promise<void> {
 		if (!this.api) return;
-		void this.discardUploadSession();
+		await this.leaveEditor();
 		const listHit = this.list.find((n) => n.id === id);
 		// 立刻进入预览壳：卸掉编辑器，避免与即将挂载的预览双实例并存
 		runInAction(() => {
@@ -246,8 +316,8 @@ class LearningNotesStore {
 		}
 	}
 
-	openEdit(note: Note) {
-		void this.discardUploadSession();
+	async openEdit(note: Note) {
+		await this.leaveEditor();
 		this.preview = null;
 		this.editingId = note.id;
 		this.uploadSessionId = crypto.randomUUID();
@@ -260,34 +330,37 @@ class LearningNotesStore {
 		if (!this.api) return;
 		try {
 			const note = await this.api.detail(id);
-			runInAction(() => {
-				this.openEdit(note);
-			});
+			await this.openEdit(note);
 		} catch {
 			// Host http 已 Toast
 		}
 	}
 
 	/** 由页面从 editor 取出最新内容后调用；成功返回 true */
-	async saveNote(input: {
-		title: string;
-		html: string;
-		text: string;
-		dirty: boolean;
-	}): Promise<boolean> {
+	async saveNote(
+		input: {
+			title: string;
+			html: string;
+			text: string;
+			dirty: boolean;
+		},
+		opts?: { silent?: boolean; auto?: boolean },
+	): Promise<boolean> {
 		if (!input.dirty) {
-			// 内容未变，但仍可能有「上传又删」的 pending 需结算
 			await this.settleUploadSessionIfNeeded(input.html);
-			this.toast(this.t('learningNotes.toast.noSave'), 'info');
+			if (!opts?.silent) {
+				this.toast(this.t('learningNotes.toast.noSave'), 'info');
+			}
 			return false;
 		}
-		if (!input.title.trim()) {
+		if (!input.title.trim() && !opts?.auto) {
 			this.toast(this.t('learningNotes.toast.needTitle'), 'info');
 			return false;
 		}
-		// getText 不含图片；仅图无字也应可存
 		if (!hasNoteBodyContent(input.html, input.text)) {
-			this.toast(this.t('learningNotes.toast.needContent'), 'info');
+			if (!opts?.silent) {
+				this.toast(this.t('learningNotes.toast.needContent'), 'info');
+			}
 			return false;
 		}
 		if (!this.api) {
@@ -306,19 +379,30 @@ class LearningNotesStore {
 				const updated = await this.api.update(this.editingId, payload);
 				runInAction(() => {
 					this.editingId = updated.id;
-					// 保存后轮换会话，后续上传归入新批次
 					this.uploadSessionId = crypto.randomUUID();
 				});
-				this.toast(this.t('learningNotes.toast.updated'), 'success');
+				if (opts?.auto) {
+					this.toast(this.t('learningNotes.toast.autoSaved'), 'success');
+				} else if (!opts?.silent) {
+					this.toast(this.t('learningNotes.toast.updated'), 'success');
+				}
 			} else {
 				const { id } = await this.api.save(payload);
 				runInAction(() => {
 					this.editingId = id;
 					this.uploadSessionId = crypto.randomUUID();
 				});
-				this.toast(this.t('learningNotes.toast.saved'), 'success');
+				if (opts?.auto) {
+					this.toast(this.t('learningNotes.toast.autoSaved'), 'success');
+				} else if (!opts?.silent) {
+					this.toast(this.t('learningNotes.toast.saved'), 'success');
+				}
 			}
-			await this.refreshList();
+			if (!opts?.silent) {
+				await this.refreshList();
+			} else {
+				void this.refreshList();
+			}
 			return true;
 		} catch {
 			// Host http 已 Toast

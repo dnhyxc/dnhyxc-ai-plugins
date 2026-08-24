@@ -35,6 +35,71 @@ export function discardUploadSessionKeepalive(sessionId: string): void {
 	});
 }
 
+/** 刷新/关页时 keepalive 结算 pending（无脏保存时） */
+export function settleUploadSessionKeepalive(
+	sessionId: string,
+	content: string,
+): void {
+	if (typeof window === 'undefined') return;
+	const sid = sessionId.trim();
+	if (!sid) return;
+	const token = localStorage.getItem('token')?.trim();
+	const base = notesApiBaseUrl();
+	if (!token || !base) return;
+	void fetch(
+		`${base}${BASE}/upload-session/${encodeURIComponent(sid)}/settle`,
+		{
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${token}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ content }),
+			keepalive: true,
+		},
+	);
+}
+
+/** 刷新/关页时 keepalive 保存笔记 */
+export function saveNoteKeepalive(input: {
+	id?: string | null;
+	title: string;
+	html: string;
+	uploadSessionId?: string | null;
+}): void {
+	if (typeof window === 'undefined') return;
+	const token = localStorage.getItem('token')?.trim();
+	const base = notesApiBaseUrl();
+	if (!token || !base) return;
+	const title = input.title.trim() || translateSync('common.untitledNote');
+	const payload: Record<string, string> = {
+		title,
+		content: input.html,
+	};
+	const sid = input.uploadSessionId?.trim();
+	if (sid) payload.uploadSessionId = sid;
+	const headers = {
+		Authorization: `Bearer ${token}`,
+		'Content-Type': 'application/json',
+	};
+	const id = input.id?.trim();
+	if (id) {
+		void fetch(`${base}${BASE}/update/${encodeURIComponent(id)}`, {
+			method: 'PUT',
+			headers,
+			body: JSON.stringify({ id, ...payload }),
+			keepalive: true,
+		});
+		return;
+	}
+	void fetch(`${base}${BASE}/save`, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(payload),
+		keepalive: true,
+	});
+}
+
 /** 列表默认每页条数 */
 export const NOTES_PAGE_SIZE = 20;
 

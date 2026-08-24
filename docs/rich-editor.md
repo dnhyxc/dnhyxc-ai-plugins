@@ -1,5 +1,7 @@
 # 富文本编辑器 (RichEditor) 实现文档
 
+> 延伸阅读：桌面端 Tauri2 把拦截的 Cmd+V 图片交回编辑器上传的机制见 [桌面端粘贴图片事件](./rich-editor/桌面端粘贴图片事件.md)。
+
 ## 1. 概述
 
 RichEditor 是基于 [Tiptap](https://tiptap.dev/)（ProseMirror 封装）的二次封装富文本编辑器组件，专为笔记类应用设计。
@@ -13,7 +15,7 @@ RichEditor 是基于 [Tiptap](https://tiptap.dev/)（ProseMirror 封装）的二
   - 列表（无序/有序/任务列表）
   - 表格（插入/行列操作/可选列宽拖拽）
   - 代码块（lowlight 语法高亮，主流语言）
-  - 本地图片（选择/粘贴/拖放，可选服务端上传）
+  - 本地图片（选择/粘贴/拖放，可选服务端上传；桌面端走 `DESKTOP_PASTE_IMAGES_EVENT` 自定义事件，详见 [桌面端粘贴图片事件](./rich-editor/桌面端粘贴图片事件.md)）
   - 链接（自定义输入面板，智能选区扩展）
   - 字数/字符统计（含 CJK 分词）
   - 空段落删除修复
@@ -129,6 +131,11 @@ sequenceDiagram
         else 图片+文本
             ImageExt->>Editor: 先粘贴文本，再异步插入图片
         end
+    else 桌面端粘贴（Tauri2，详见 桌面端粘贴图片事件.md）
+        User->>Host: Cmd+V（原生层拦截 paste）
+        Host->>ImageExt: dispatchEvent(DESKTOP_PASTE_IMAGES_EVENT, { files })
+        ImageExt->>ImageExt: view() 监听 + isImageFile 过滤
+        ImageExt->>Editor: insertImages 异步插入
     else 拖放图片
         User->>ImageExt: 拖放图片文件
         ImageExt->>Editor: handleDrop → insertImages
@@ -563,6 +570,8 @@ export { createExtensions } from './extensions';
 // 导出图片相关工具
 export type { ResolveImageSrc } from './image';
 export { fileToDataUrl, pickImageFile } from './image';
+// 注：ImageUpload 扩展与 DESKTOP_PASTE_IMAGES_EVENT 常量从 ./image 子模块导出
+// （Host 可经 `@design/RichEditor/image` 或子路径 import 该常量）
 // 导出国际化类型和预设
 export type { RichEditorLocale } from './locale';
 export { enUS, richEditorLocaleOf, zhCN } from './locale';

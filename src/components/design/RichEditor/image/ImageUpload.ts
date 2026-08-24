@@ -6,6 +6,7 @@ import {
 	dataTransferImageFiles,
 	fileToDataUrl,
 	insertImages,
+	isImageFile,
 	type ResolveImageSrc,
 } from './image';
 
@@ -14,9 +15,13 @@ export type ImageUploadOptions = {
 	resolveSrcRef: { current: ResolveImageSrc };
 };
 
+/** Host（Tauri）粘贴本地图时派发，detail.files 为 File[] */
+export const DESKTOP_PASTE_IMAGES_EVENT = 'rich-editor:desktop-paste-images';
+
 /**
  * 粘贴 / 拖放本地图片到编辑器。
  * ponytail: 通过 ref 读上传函数，避免 useEditor 扩展不随 props 重建。
+ * 桌面端 Host 拦截 Cmd+V 后通过 DESKTOP_PASTE_IMAGES_EVENT 交回本扩展上传。
  */
 export const ImageUpload = Extension.create<ImageUploadOptions>({
 	name: 'imageUpload',
@@ -34,6 +39,28 @@ export const ImageUpload = Extension.create<ImageUploadOptions>({
 		return [
 			new Plugin({
 				key: new PluginKey('imageUpload'),
+				view(editorView) {
+					const onDesktopPaste = (e: Event) => {
+						const ce = e as CustomEvent<{ files?: File[] }>;
+						const files = (ce.detail?.files ?? []).filter(isImageFile);
+						if (!files.length) return;
+						ce.preventDefault();
+						ce.stopPropagation();
+						void insertImages(editor, files, (f) => resolveSrcRef.current(f));
+					};
+					editorView.dom.addEventListener(
+						DESKTOP_PASTE_IMAGES_EVENT,
+						onDesktopPaste,
+					);
+					return {
+						destroy() {
+							editorView.dom.removeEventListener(
+								DESKTOP_PASTE_IMAGES_EVENT,
+								onDesktopPaste,
+							);
+						},
+					};
+				},
 				props: {
 					handlePaste(_view, event) {
 						const files = clipboardImageFiles(event);

@@ -96,6 +96,7 @@ const zhCN: Record<string, string> = {
 	'learningNotes.toast.exportFail': '导出失败',
 	'learningNotes.toast.exportNoDownload': '当前环境未提供下载能力',
 	'learningNotes.toast.exportInvalid': '导出文件无效',
+	'learningNotes.toast.uploadImageFailed': '图片上传失败',
 
 	'ideasList.unboundBook': '未绑定当前书籍',
 	'ideasList.empty': '暂无想法',

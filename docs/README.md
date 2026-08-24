@@ -11,6 +11,7 @@
 | 文档 | 功能模块 | 核心技术 | 源码行数 |
 |------|----------|----------|----------|
 | [rich-editor.md](./rich-editor.md) | **富文本编辑器 (RichEditor)** | Tiptap + ProseMirror | ~2900 行 |
+| [rich-editor/桌面端粘贴图片事件.md](./rich-editor/桌面端粘贴图片事件.md) | **桌面端粘贴图片事件** | ProseMirror `view()` + CustomEvent | 新增 |
 | [video-player.md](./video-player.md) | **视频播放器 (VideoPlayer)** | xgplayer + 自定义控制条 | ~2800 行 |
 | [drag-drop-file-upload.md](./drag-drop-file-upload.md) | **拖拽文件上传 (DragDropFileUpload)** | Headless Hook + UI 双层架构 | ~550 行 |
 | [note-preview.md](./note-preview.md) | **笔记预览 (NotePreview)** | 静态 HTML 渲染 + CSS Containment | ~200 行 |
@@ -21,6 +22,7 @@
 | 文档 | 功能模块 | 核心技术 | 源码行数 |
 |------|----------|----------|----------|
 | [learning-notes.md](./learning-notes.md) | **学习笔记 (Learning Notes)** | MobX + HostBridge + 长文分页 | ~2850 行 |
+| [learning-notes/笔记图片上传会话.md](./learning-notes/笔记图片上传会话.md) | **笔记图片上传会话** | uploadSessionId 生命周期 + keepalive discard | 新增 |
 | [ebook-ideas.md](./ebook-ideas.md) | **电子书想法列表 (Ebook Ideas)** | IntersectionObserver + HostBridge | ~270 行 |
 | [ebook-highlights.md](./ebook-highlights.md) | **电子书划线列表 (Ebook Highlights)** | IntersectionObserver + CFI 跳转 | ~270 行 |
 
@@ -71,8 +73,14 @@
 docs/
 ├── README.md                              ← 你在这里
 ├── rich-editor.md                         ← 富文本编辑器（最复杂组件）
+├── rich-editor/
+│   ├── README.md                          ← 功能域索引
+│   └── 桌面端粘贴图片事件.md               ← DESKTOP_PASTE_IMAGES_EVENT 接入
 ├── video-player.md                        ← 视频播放器（含自定义控制条）
 ├── learning-notes.md                      ← 学习笔记（完整 CRUD + MobX）
+├── learning-notes/
+│   ├── README.md                          ← 功能域索引
+│   └── 笔记图片上传会话.md                 ← uploadSessionId 生命周期
 ├── ebook-ideas.md                        ← 想法列表（分页懒加载）
 ├── ebook-highlights.md                    ← 划线列表（同构设计）
 ├── drag-drop-file-upload.md               ← 拖拽上传（Headless Hook）

@@ -1,5 +1,7 @@
 # 学习笔记 (Learning Notes) 实现文档
 
+> 延伸阅读：图片上传与孤儿回收的会话级实现见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)。
+
 ## 1. 概述
 
 学习笔记是一个功能完整的笔记 CRUD 管理系统，作为微前端插件（Module Federation）嵌入主站运行。核心特性包括：
@@ -9,6 +11,7 @@
 - **RichEditor 富文本编辑**：基于 TipTap 的二次封装，支持标题/格式/图片/链接/表格等
 - **三种视图模式**：笔记列表、编辑视图、预览视图
 - **长文分页保存**：`LargeNoteEditor` 实现滚动窗口式长文编辑，避免大数据量 DOM 渲染卡顿
+- **图片上传会话**：编辑器粘贴 / 拖放 / 选图走 `uploadSessionId` 生命周期，保存时认领、切笔记 / 关页时回收，避免 COS 孤儿图（详见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)）
 - **DOCX 导出**：服务端生成 Word 文档，通过 Host `downloadBlob` API 落盘
 - **分屏布局**：`ResizablePanel` 可拖拽调整列表/编辑器宽度
 - **HostBridge 通信**：通过 `api.http` / `api.ui` / `api.event` 与主站宿主通信
@@ -103,16 +106,19 @@ flowchart TD
     C --> E[store.saveNote]
     D --> E
     E --> F{dirty?}
-    F -->|否| G[Toast: 无需保存]
+    F -->|否| F2[settleUploadSessionIfNeeded]
+    F2 --> G[Toast: 无需保存]
     F -->|是| H{title 非空?}
     H -->|否| I[Toast: 请输入标题]
     H -->|是| J{有正文内容?}
     J -->|否| K[Toast: 请输入内容]
     J -->|是| L{有编辑ID?}
-    L -->|是| M[api.update PUT]
-    L -->|否| N[api.save POST]
-    M --> O[Toast: 更新成功]
-    N --> P[Toast: 保存成功]
+    L -->|是| M[api.update PUT（带 uploadSessionId）]
+    L -->|否| N[api.save POST（带 uploadSessionId）]
+    M --> M2[轮换 uploadSessionId]
+    N --> N2[轮换 uploadSessionId]
+    M2 --> O[Toast: 更新成功]
+    N2 --> P[Toast: 保存成功]
     O --> Q[refreshList]
     P --> Q
     Q --> R[markClean 清除脏状态]
@@ -298,19 +304,42 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	// 将当前内容标记为干净（与基线一致）
 	const markClean = useCallback(() => {
 		baselineHtmlRef.current = currentHtml();  // 更新基线
+		dirtyRef.current = false;                 // 同步 ref（新增）
 		setDirty(false);
 	}, [currentHtml]);
 
 	// 同步脏状态（比较当前 HTML 与基线 HTML）
+	// ⚠ 新增 dirtyRef + dirty→clean 时 settleUploadSessionIfNeeded：见
+	//   docs/learning-notes/笔记图片上传会话.md §4.16
 	const syncDirty = useCallback(() => {
-		setDirty(currentHtml() !== baselineHtmlRef.current);
-	}, [currentHtml]);
+		const html = currentHtml();
+		const nextDirty = html !== baselineHtmlRef.current;
+		const wasDirty = dirtyRef.current;
+		dirtyRef.current = nextDirty;
+		setDirty(nextDirty);
+		// 仅在「有改动 → 回到基线」（如上传又删）时结算 pending
+		if (wasDirty && !nextDirty) {
+			void store.settleUploadSessionIfNeeded(html);
+		}
+	}, [currentHtml, store]);
 
 	// ==================== 绑定 Store 依赖 ====================
 	// 将主站 HTTP、Toast、翻译函数注入到 Store 中
 	useEffect(() => {
 		store.bind(api.http, toast, t, api.ui?.downloadBlob);
 	}, [api.http, api.ui?.downloadBlob, store, toast, t]);
+
+	// ==================== pagehide 兜底 discard（新增） ====================
+	// 仅在编辑态 + 有 uploadSessionId 时绑 pagehide：刷新 / 关页时 keepalive DELETE。
+	// 详见 docs/learning-notes/笔记图片上传会话.md §4.16
+	useEffect(() => {
+		if (store.preview) return;
+		const sid = store.uploadSessionId;
+		if (!sid) return;
+		const onPageHide = () => store.flushUploadSessionOnPageHide(sid);
+		window.addEventListener('pagehide', onPageHide);
+		return () => window.removeEventListener('pagehide', onPageHide);
+	}, [store.preview, store.uploadSessionId, store]);
 
 	// ==================== 聚焦标题输入框 ====================
 	// 保存失败时（如标题为空），自动滚动到顶部并聚焦标题

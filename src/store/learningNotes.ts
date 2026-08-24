@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { translateSync } from '@/i18n';
 import {
 	createNotesApi,
+	discardUploadSessionKeepalive,
 	type HostHttp,
 	NOTES_PAGE_SIZE,
 	type Note,
@@ -53,6 +54,11 @@ class LearningNotesStore {
 	preview: Note | null = null;
 	loadingDetail = false;
 	editingId: string | null = null;
+	/**
+	 * 新建/编辑共用的上传会话：图片先记 pending，
+	 * 保存时认领正文图；内容回到基线或放弃会话时回收。
+	 */
+	uploadSessionId: string | null = null;
 	editorSeed = 0;
 	editorInitial: string | typeof EMPTY_NOTE_DOC = EMPTY_NOTE_DOC;
 	saving = false;
@@ -77,6 +83,18 @@ class LearningNotesStore {
 		this.toast = toast;
 		this.downloadBlob = downloadBlob ?? null;
 		if (t) this.t = t;
+	}
+
+	/**
+	 * 真正离页（刷新/关标签）时 keepalive discard。
+	 * ponytail: 不用 visibilitychange — 桌面端失焦/粘贴/选文件也会 hidden，会误删正文里的图。
+	 * 切笔记/预览/新建由 discardUploadSession 处理，此处不做 cleanup flush。
+	 */
+	flushUploadSessionOnPageHide(sessionId: string): void {
+		const sid = sessionId.trim();
+		if (!sid) return;
+		if (this.uploadSessionId === sid) this.uploadSessionId = null;
+		discardUploadSessionKeepalive(sid);
 	}
 
 	get hasMore(): boolean {
@@ -177,14 +195,17 @@ class LearningNotesStore {
 	}
 
 	openNew() {
+		void this.discardUploadSession();
 		this.preview = null;
 		this.editingId = null;
+		this.uploadSessionId = crypto.randomUUID();
 		this.editorInitial = EMPTY_NOTE_DOC;
 		this.editorSeed += 1;
 	}
 
 	async openPreview(id: string): Promise<void> {
 		if (!this.api) return;
+		void this.discardUploadSession();
 		const listHit = this.list.find((n) => n.id === id);
 		// 立刻进入预览壳：卸掉编辑器，避免与即将挂载的预览双实例并存
 		runInAction(() => {
@@ -226,8 +247,10 @@ class LearningNotesStore {
 	}
 
 	openEdit(note: Note) {
+		void this.discardUploadSession();
 		this.preview = null;
 		this.editingId = note.id;
+		this.uploadSessionId = crypto.randomUUID();
 		this.editorInitial = note.html || EMPTY_NOTE_DOC;
 		// 预览态编辑器已卸载，重新挂载时用 editorInitial；seed 保证同 key 残留实例也被清掉
 		this.editorSeed += 1;
@@ -253,6 +276,8 @@ class LearningNotesStore {
 		dirty: boolean;
 	}): Promise<boolean> {
 		if (!input.dirty) {
+			// 内容未变，但仍可能有「上传又删」的 pending 需结算
+			await this.settleUploadSessionIfNeeded(input.html);
 			this.toast(this.t('learningNotes.toast.noSave'), 'info');
 			return false;
 		}
@@ -271,20 +296,25 @@ class LearningNotesStore {
 		}
 		this.saving = true;
 		try {
+			const sessionId = this.uploadSessionId;
 			const payload = {
 				title: input.title.trim() || this.t('common.untitledNote'),
 				html: input.html,
+				uploadSessionId: sessionId,
 			};
 			if (this.editingId) {
 				const updated = await this.api.update(this.editingId, payload);
 				runInAction(() => {
 					this.editingId = updated.id;
+					// 保存后轮换会话，后续上传归入新批次
+					this.uploadSessionId = crypto.randomUUID();
 				});
 				this.toast(this.t('learningNotes.toast.updated'), 'success');
 			} else {
 				const { id } = await this.api.save(payload);
 				runInAction(() => {
 					this.editingId = id;
+					this.uploadSessionId = crypto.randomUUID();
 				});
 				this.toast(this.t('learningNotes.toast.saved'), 'success');
 			}
@@ -401,6 +431,58 @@ class LearningNotesStore {
 			runInAction(() => {
 				this.exportingDocx = false;
 			});
+		}
+	}
+
+	/**
+	 * 编辑器粘贴 / 拖放 / 选图：上传后返回 URL；失败返回 null（不插入 base64）。
+	 * 始终带 uploadSessionId 记 pending，避免已保存笔记「上传又删且未保存」孤儿。
+	 */
+	async uploadNoteImage(
+		file: File,
+		noteId?: string | null,
+	): Promise<string | null> {
+		if (!this.api) {
+			this.toast(this.t('learningNotes.toast.httpDeniedSync'), 'error');
+			return null;
+		}
+		try {
+			if (!this.uploadSessionId) {
+				this.uploadSessionId = crypto.randomUUID();
+			}
+			return await this.api.uploadImage(file, {
+				noteId: noteId ?? this.editingId,
+				uploadSessionId: this.uploadSessionId,
+			});
+		} catch (e) {
+			toastUnlessHostHttp(this.toast, e, this.t);
+			return null;
+		}
+	}
+
+	/**
+	 * 内容已回到基线（无需保存）时，按当前 HTML 结算 pending。
+	 * 上传后又删掉的图会在此回收 COS。
+	 */
+	async settleUploadSessionIfNeeded(html: string): Promise<void> {
+		const sid = this.uploadSessionId;
+		if (!sid || !this.api) return;
+		try {
+			await this.api.settleUploadSession(sid, html);
+		} catch {
+			// Host 已 Toast；离开时 discard / TTL 仍会清
+		}
+	}
+
+	/** 放弃当前上传会话的 pending（切笔记 / 新建时调用） */
+	async discardUploadSession(): Promise<void> {
+		const sid = this.uploadSessionId;
+		this.uploadSessionId = null;
+		if (!sid || !this.api) return;
+		try {
+			await this.api.discardUploadSession(sid);
+		} catch {
+			// Host 已 Toast；离页 keepalive / TTL 仍会清
 		}
 	}
 

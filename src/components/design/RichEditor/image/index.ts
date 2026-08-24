@@ -1,4 +1,8 @@
-export { ImageUpload, type ImageUploadOptions } from './ImageUpload';
+export {
+	DESKTOP_PASTE_IMAGES_EVENT,
+	ImageUpload,
+	type ImageUploadOptions,
+} from './ImageUpload';
 export {
 	clipboardHasTextContent,
 	clipboardImageFiles,

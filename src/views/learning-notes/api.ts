@@ -11,6 +11,30 @@ export type HostHttp = {
 
 const BASE = '/english-learning/notes';
 
+function notesApiBaseUrl(): string {
+	const base = (
+		import.meta.env.PROD
+			? import.meta.env.VITE_PROD_API_DOMAIN
+			: import.meta.env.VITE_DEV_API_DOMAIN
+	)?.trim();
+	return base || '';
+}
+
+/** 刷新/关页时 keepalive discard（async Host http 会被浏览器掐断） */
+export function discardUploadSessionKeepalive(sessionId: string): void {
+	if (typeof window === 'undefined') return;
+	const sid = sessionId.trim();
+	if (!sid) return;
+	const token = localStorage.getItem('token')?.trim();
+	const base = notesApiBaseUrl();
+	if (!token || !base) return;
+	void fetch(`${base}${BASE}/upload-session/${encodeURIComponent(sid)}`, {
+		method: 'DELETE',
+		headers: { Authorization: `Bearer ${token}` },
+		keepalive: true,
+	});
+}
+
 /** 列表默认每页条数 */
 export const NOTES_PAGE_SIZE = 20;
 
@@ -110,24 +134,35 @@ export function createNotesApi(http: HostHttp) {
 		async save(input: {
 			title: string;
 			html: string;
+			uploadSessionId?: string | null;
 		}): Promise<{ id: string }> {
 			const res = await http.post(`${BASE}/save`, {
 				title: input.title.trim() || null,
 				content: input.html,
+				...(input.uploadSessionId?.trim()
+					? { uploadSessionId: input.uploadSessionId.trim() }
+					: {}),
 			});
 			return unwrapData<{ id: string }>(res);
 		},
 
 		async update(
 			id: string,
-			input: { title: string; html: string },
-		): Promise<Note> {
+			input: {
+				title: string;
+				html: string;
+				uploadSessionId?: string | null;
+			},
+		): Promise<{ id: string }> {
 			const res = await http.put(`${BASE}/update/${id}`, {
 				id,
 				title: input.title.trim() || null,
 				content: input.html,
+				...(input.uploadSessionId?.trim()
+					? { uploadSessionId: input.uploadSessionId.trim() }
+					: {}),
 			});
-			return toNote(unwrapData<NoteRecord>(res));
+			return unwrapData<{ id: string }>(res);
 		},
 
 		async remove(id: string): Promise<void> {
@@ -138,6 +173,49 @@ export function createNotesApi(http: HostHttp) {
 		async setVisibility(id: string, isPublic: boolean): Promise<Note> {
 			const res = await http.put(`${BASE}/visibility/${id}`, { isPublic });
 			return toNote(unwrapData<NoteListItem>(res));
+		},
+
+		/**
+		 * 笔记图片上传至 COS notes/。
+		 * 优先带 uploadSessionId 记 pending；保存或内容回干净时再结算。
+		 */
+		async uploadImage(
+			file: File,
+			opts?: { noteId?: string | null; uploadSessionId?: string | null },
+		): Promise<string> {
+			const fd = new FormData();
+			fd.append('file', file);
+			const sessionId = opts?.uploadSessionId?.trim();
+			const noteId = opts?.noteId?.trim();
+			if (sessionId) fd.append('uploadSessionId', sessionId);
+			else if (noteId) fd.append('noteId', noteId);
+			const res = await http.post(`${BASE}/upload-image`, fd);
+			const data = unwrapData<{ url?: string }>(res);
+			const url = data?.url?.trim();
+			if (!url) {
+				throw new Error(translateSync('learningNotes.toast.uploadImageFailed'));
+			}
+			return url;
+		},
+
+		/** 放弃上传会话（回收该会话全部 pending） */
+		async discardUploadSession(sessionId: string): Promise<void> {
+			const sid = sessionId.trim();
+			if (!sid) return;
+			await http.delete(`${BASE}/upload-session/${encodeURIComponent(sid)}`);
+		},
+
+		/** 按正文结算会话（上传又删、无需保存时回收） */
+		async settleUploadSession(
+			sessionId: string,
+			content: string,
+		): Promise<void> {
+			const sid = sessionId.trim();
+			if (!sid) return;
+			await http.post(
+				`${BASE}/upload-session/${encodeURIComponent(sid)}/settle`,
+				{ content },
+			);
 		},
 	};
 }

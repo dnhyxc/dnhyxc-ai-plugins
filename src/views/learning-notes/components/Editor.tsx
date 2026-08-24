@@ -38,6 +38,8 @@ type Props = {
 	locale: Partial<RichEditorLocale>;
 	placeholder?: string;
 	toolbarExtra?: RichEditorProps['toolbarExtra'];
+	/** 粘贴 / 拖放 / 工具栏选图：上传后返回 URL */
+	onUploadImage?: RichEditorProps['onUploadImage'];
 	className?: string;
 	editorClassName?: string;
 	onReady: (editor: Editor, save: LargeNoteSaveApi) => void;
@@ -75,6 +77,7 @@ export function LargeNoteEditor({
 	locale,
 	placeholder,
 	toolbarExtra,
+	onUploadImage,
 	className,
 	editorClassName,
 	onReady,
@@ -237,6 +240,7 @@ export function LargeNoteEditor({
 				locale={locale}
 				showCharCount={false}
 				showBubbleMenu={false}
+				onUploadImage={onUploadImage}
 				onBodyScroll={onBodyScroll}
 				renderBody={renderBody}
 				onChange={() => onChangeRef.current?.()}

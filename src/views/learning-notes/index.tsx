@@ -75,6 +75,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const savingRef = useRef(false);
 	const previewRef = useRef(store.preview);
 	const baselineHtmlRef = useRef('');
+	const dirtyRef = useRef(false);
 	const [readyKey, setReadyKey] = useState<string | null>(null);
 	const [mountEditor, setMountEditor] = useState(false);
 	const [dirty, setDirty] = useState(false);
@@ -98,16 +99,36 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	const markClean = useCallback(() => {
 		baselineHtmlRef.current = currentHtml();
+		dirtyRef.current = false;
 		setDirty(false);
 	}, [currentHtml]);
 
 	const syncDirty = useCallback(() => {
-		setDirty(currentHtml() !== baselineHtmlRef.current);
-	}, [currentHtml]);
+		const html = currentHtml();
+		const nextDirty = html !== baselineHtmlRef.current;
+		const wasDirty = dirtyRef.current;
+		dirtyRef.current = nextDirty;
+		setDirty(nextDirty);
+		// 仅在「有改动 → 回到基线」（如上传又删）时结算 pending，避免每次干净态 onChange 打接口
+		if (wasDirty && !nextDirty) {
+			void store.settleUploadSessionIfNeeded(html);
+		}
+	}, [currentHtml, store]);
 
 	useEffect(() => {
 		store.bind(api.http, toast, t, api.ui?.downloadBlob);
 	}, [api.http, api.ui?.downloadBlob, store, toast, t]);
+
+	/** 仅 pagehide（刷新/关页）时 discard；编辑中切后台不处理 */
+	useEffect(() => {
+		if (store.preview) return;
+		const sid = store.uploadSessionId;
+		if (!sid) return;
+
+		const onPageHide = () => store.flushUploadSessionOnPageHide(sid);
+		window.addEventListener('pagehide', onPageHide);
+		return () => window.removeEventListener('pagehide', onPageHide);
+	}, [store.preview, store.uploadSessionId, store]);
 
 	const focusTitle = useCallback(() => {
 		const editor = editorRef.current;
@@ -280,6 +301,11 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const editorReady = readyKey === editorKey;
 	const useLarge = isLargeNoteHtml(store.editorInitial);
 
+	const onUploadImage = useCallback(
+		(file: File) => store.uploadNoteImage(file),
+		[store],
+	);
+
 	// 先画 Loading，下一帧再挂 TipTap，避免长文解析时连遮罩都刷不出来
 	useEffect(() => {
 		if (store.preview) {
@@ -331,7 +357,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 							id="learning-notes-list"
 							defaultSize={35}
 							minSize={0}
-							className="min-h-0 min-w-0"
+							className="min-h-0 min-w-0 overflow-hidden!"
 						>
 							<NotesListPanel locale={locale} />
 						</ResizablePanel>
@@ -342,7 +368,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 					id="learning-notes-editor"
 					defaultSize={store.listOpen ? 65 : 100}
 					minSize={0}
-					className="min-h-0 min-w-0 overflow-hidden"
+					className="min-h-0 min-w-0 overflow-hidden!"
 				>
 					<div className="border-theme/10 relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
 						{!store.preview ? (
@@ -354,6 +380,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 											defaultContent={store.editorInitial}
 											placeholder={t('learningNotes.placeholder')}
 											locale={editorLocale}
+											onUploadImage={onUploadImage}
 											onReady={(e, save) => {
 												editorRef.current = e;
 												pagedSaveRef.current = save;
@@ -374,6 +401,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 											placeholder={t('learningNotes.placeholder')}
 											locale={editorLocale}
 											showCharCount={false}
+											onUploadImage={onUploadImage}
 											onCreate={(e) => {
 												editorRef.current = e;
 												pagedSaveRef.current = null;

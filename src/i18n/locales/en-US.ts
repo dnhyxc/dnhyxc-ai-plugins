@@ -100,6 +100,7 @@ const enUS: Record<string, string> = {
 	'learningNotes.toast.exportFail': 'Export failed',
 	'learningNotes.toast.exportNoDownload': 'Download is unavailable here',
 	'learningNotes.toast.exportInvalid': 'Invalid export file',
+	'learningNotes.toast.uploadImageFailed': 'Image upload failed',
 
 	'ideasList.unboundBook': 'No book bound',
 	'ideasList.empty': 'No ideas yet',

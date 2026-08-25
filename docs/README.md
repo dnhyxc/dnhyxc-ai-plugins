@@ -24,6 +24,7 @@
 | [learning-notes.md](./learning-notes.md) | **学习笔记 (Learning Notes)** | MobX + HostBridge + 长文分页 | ~2850 行 |
 | [learning-notes/笔记图片上传会话.md](./learning-notes/笔记图片上传会话.md) | **笔记图片上传会话** | uploadSessionId 生命周期 + keepalive discard | 新增 |
 | [learning-notes/笔记自动保存与离页保存.md](./learning-notes/笔记自动保存与离页保存.md) | **笔记自动保存与离页保存** | 三层自动保存兜底 + keepalive save/settle | 新增 |
+| [learning-notes/跨窗草稿同步与脏标记仲裁.md](./learning-notes/跨窗草稿同步与脏标记仲裁.md) | **跨窗草稿同步与脏标记仲裁** | Host modules 同步 + dirty 三段仲裁 + adopt/rotate owned | 新增 |
 | [ebook-ideas.md](./ebook-ideas.md) | **电子书想法列表 (Ebook Ideas)** | IntersectionObserver + HostBridge | ~270 行 |
 | [ebook-highlights.md](./ebook-highlights.md) | **电子书划线列表 (Ebook Highlights)** | IntersectionObserver + CFI 跳转 | ~270 行 |
 
@@ -82,7 +83,8 @@ docs/
 ├── learning-notes/
 │   ├── README.md                          ← 功能域索引
 │   ├── 笔记图片上传会话.md                 ← uploadSessionId 生命周期
-│   └── 笔记自动保存与离页保存.md           ← 三层自动保存兜底 + keepalive
+│   ├── 笔记自动保存与离页保存.md           ← 三层自动保存兜底 + keepalive
+│   └── 跨窗草稿同步与脏标记仲裁.md         ← Host 多窗草稿同步 + dirty 仲裁
 ├── ebook-ideas.md                        ← 想法列表（分页懒加载）
 ├── ebook-highlights.md                    ← 划线列表（同构设计）
 ├── drag-drop-file-upload.md               ← 拖拽上传（Headless Hook）

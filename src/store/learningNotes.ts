@@ -49,7 +49,33 @@ class LearningNotesStore {
 	private t: TFn = translateSync;
 	/** Host 透传的 downloadBlob（Web / Tauri2）；独立预览可由 mock 注入 */
 	private downloadBlob: HostDownloadBlob | null = null;
-	private getEditorSnapshot: (() => NoteEditorSnapshot | null) | null = null;
+	private editorSnapshotReader: (() => NoteEditorSnapshot | null) | null = null;
+	private remoteDraftApplier:
+		| ((
+				noteId: string,
+				draft: {
+					html: string;
+					title: string;
+					uploadSessionId?: string | null;
+					dirty?: boolean;
+				},
+		  ) => boolean)
+		| null = null;
+	private remoteSavedApplier:
+		| ((noteId: string, payload: { html: string; title: string }) => boolean)
+		| null = null;
+	/** detail 返回前对端推送的未保存草稿，避免被服务端正文盖掉 */
+	private pendingPeerDraft: {
+		noteId: string;
+		html: string;
+		title: string;
+		uploadSessionId?: string | null;
+		dirty?: boolean;
+		/** 服务端干净正文；预览→编辑时用作 dirty 基线 */
+		baselineHtml?: string;
+	} | null = null;
+	/** 当前篇服务端干净正文（预览合并对端草稿后仍保留） */
+	private savedBaselineHtml: string | null = null;
 
 	/** 列表（分页累积） */
 	list: Note[] = [];
@@ -66,10 +92,17 @@ class LearningNotesStore {
 	loadingDetail = false;
 	editingId: string | null = null;
 	/**
+	 * 正文所属笔记 id。预览会清空 editingId，但保存必须仍能 update，
+	 * 否则偶发 POST /save 把已有笔记存成副本。
+	 */
+	boundNoteId: string | null = null;
+	/**
 	 * 新建/编辑共用的上传会话：图片先记 pending，
 	 * 保存时认领正文图；内容回到基线或放弃会话时回收。
 	 */
 	uploadSessionId: string | null = null;
+	/** 本窗创建的会话才可 discard；对端 adopt 的会话丢弃时只摘引用 */
+	uploadSessionOwned = true;
 	editorSeed = 0;
 	editorInitial: string | typeof EMPTY_NOTE_DOC = EMPTY_NOTE_DOC;
 	saving = false;
@@ -97,13 +130,42 @@ class LearningNotesStore {
 	}
 
 	registerEditorSnapshot(fn: (() => NoteEditorSnapshot | null) | null): void {
-		this.getEditorSnapshot = fn;
+		this.editorSnapshotReader = fn;
+	}
+
+	/** Host / 关窗：读取当前编辑器快照 */
+	takeEditorSnapshot(): NoteEditorSnapshot | null {
+		return this.editorSnapshotReader?.() ?? null;
+	}
+
+	registerRemoteDraftApplier(
+		fn:
+			| ((
+					noteId: string,
+					draft: {
+						html: string;
+						title: string;
+						uploadSessionId?: string | null;
+						dirty?: boolean;
+					},
+			  ) => boolean)
+			| null,
+	): void {
+		this.remoteDraftApplier = fn;
+	}
+
+	registerRemoteSavedApplier(
+		fn:
+			| ((noteId: string, payload: { html: string; title: string }) => boolean)
+			| null,
+	): void {
+		this.remoteSavedApplier = fn;
 	}
 
 	/** 切笔记 / 新建 / 离页前：有改动则静默保存 */
 	async autoSaveIfDirty(opts?: { silent?: boolean }): Promise<boolean> {
 		if (this.saving || this.preview) return false;
-		const snap = this.getEditorSnapshot?.();
+		const snap = this.takeEditorSnapshot();
 		if (!snap) return false;
 		if (!snap.dirty) {
 			await this.settleUploadSessionIfNeeded(snap.html);
@@ -144,26 +206,35 @@ class LearningNotesStore {
 	/** 刷新/关页：keepalive 保存或结算 pending（不用 visibilitychange） */
 	flushNoteOnPageHide(): void {
 		if (this.preview) return;
-		const snap = this.getEditorSnapshot?.();
+		const snap = this.takeEditorSnapshot();
 		const sid = this.uploadSessionId;
+		const owned = this.uploadSessionOwned;
 		if (snap?.dirty && hasNoteBodyContent(snap.html, snap.text)) {
 			saveNoteKeepalive({
-				id: this.editingId,
+				id: this.saveTargetId,
 				title: snap.title.trim() || this.t('common.untitledNote'),
 				html: snap.html,
 				uploadSessionId: sid,
 			});
 			this.uploadSessionId = null;
+			this.uploadSessionOwned = true;
 			return;
 		}
 		if (sid && snap) {
 			settleUploadSessionKeepalive(sid, snap.html);
-			if (this.uploadSessionId === sid) this.uploadSessionId = null;
+			if (this.uploadSessionId === sid) {
+				this.uploadSessionId = null;
+				this.uploadSessionOwned = true;
+			}
 			return;
 		}
 		if (sid) {
-			discardUploadSessionKeepalive(sid);
-			if (this.uploadSessionId === sid) this.uploadSessionId = null;
+			// 仅 discard 本窗创建的会话，避免误删对端仍在用的 pending 图
+			if (owned) discardUploadSessionKeepalive(sid);
+			if (this.uploadSessionId === sid) {
+				this.uploadSessionId = null;
+				this.uploadSessionOwned = true;
+			}
 		}
 	}
 
@@ -173,6 +244,15 @@ class LearningNotesStore {
 
 	get hasActive(): boolean {
 		return !!(this.preview?.id ?? this.editingId);
+	}
+
+	/** 保存目标 id：优先编辑态，其次绑定态（预览清空 editingId 后的回退） */
+	get saveTargetId(): string | null {
+		return this.editingId ?? this.boundNoteId;
+	}
+
+	private bindNoteId(id: string | null) {
+		this.boundNoteId = id?.trim() || null;
 	}
 
 	clearList() {
@@ -211,7 +291,11 @@ class LearningNotesStore {
 		this.loadingDetail = loading;
 	}
 
-	async fetchPage(page: number, append: boolean): Promise<void> {
+	async fetchPage(
+		page: number,
+		append: boolean,
+		opts?: { ignoreListOpen?: boolean },
+	): Promise<void> {
 		if (!this.api) {
 			this.toast(this.t('learningNotes.toast.httpDeniedSync'), 'error');
 			return;
@@ -228,8 +312,8 @@ class LearningNotesStore {
 		try {
 			const data = await this.api.list(page, this.pageSize);
 			runInAction(() => {
-				// 关闭列表后丢弃迟到回包，避免清空后又被写回
-				if (!this.listOpen) return;
+				// 关闭列表后丢弃迟到回包，避免清空后又被写回（跨窗同步除外）
+				if (!opts?.ignoreListOpen && !this.listOpen) return;
 				this.total = data.total;
 				this.pageNo = page;
 				if (append) {
@@ -258,6 +342,115 @@ class LearningNotesStore {
 		await this.fetchPage(1, false);
 	}
 
+	/** 跨窗同步：无论列表是否展开都刷新 */
+	async refreshListFromSync(): Promise<void> {
+		await this.fetchPage(1, false, { ignoreListOpen: true });
+	}
+
+	/** 跨窗同步：共用上传方 uploadSessionId；标记为非本窗所有，离开时不 discard */
+	adoptUploadSessionIdForSync(sessionId: string | null | undefined) {
+		const sid = sessionId?.trim();
+		if (!sid || this.uploadSessionId === sid) return;
+		this.uploadSessionId = sid;
+		this.uploadSessionOwned = false;
+	}
+
+	private rotateUploadSession() {
+		this.uploadSessionId = crypto.randomUUID();
+		this.uploadSessionOwned = true;
+	}
+
+	applyRemoteDraft(
+		noteId: string,
+		draft: {
+			html: string;
+			title: string;
+			uploadSessionId?: string | null;
+			dirty?: boolean;
+		},
+	) {
+		if (this.preview?.id === noteId) {
+			const baseline =
+				this.savedBaselineHtml ?? this.pendingPeerDraft?.baselineHtml;
+			if (draft.dirty === false) {
+				this.pendingPeerDraft = null;
+				if (draft.html.trim()) this.savedBaselineHtml = draft.html;
+			} else {
+				// 预览期间保留 pending，供预览→编辑恢复「服务端基线 + 未保存草稿」
+				this.pendingPeerDraft = {
+					noteId,
+					html: draft.html,
+					title: draft.title,
+					uploadSessionId: draft.uploadSessionId,
+					dirty: draft.dirty ?? true,
+					baselineHtml: baseline,
+				};
+			}
+			this.preview = { ...this.preview, html: draft.html, title: draft.title };
+			return;
+		}
+		if (this.editingId === noteId) {
+			this.pendingPeerDraft = null;
+			this.adoptUploadSessionIdForSync(draft.uploadSessionId);
+			if (this.remoteDraftApplier?.(noteId, draft)) return;
+			this.editorInitial = draft.html;
+			this.editorSeed += 1;
+			return;
+		}
+		// 对端已推快照但本窗还在 openEditById / detail 途中
+		this.pendingPeerDraft = {
+			noteId,
+			html: draft.html,
+			title: draft.title,
+			uploadSessionId: draft.uploadSessionId,
+			dirty: draft.dirty,
+			baselineHtml: this.savedBaselineHtml ?? undefined,
+		};
+	}
+
+	applyRemoteSaved(noteId: string, payload: { html: string; title: string }) {
+		if (this.pendingPeerDraft?.noteId === noteId) {
+			this.pendingPeerDraft = null;
+		}
+		if (payload.html.trim()) {
+			this.savedBaselineHtml = payload.html;
+		}
+		if (this.preview?.id === noteId) {
+			this.preview = {
+				...this.preview,
+				title: payload.title || this.preview.title,
+				...(payload.html.trim() ? { html: payload.html } : {}),
+			};
+		}
+		if (payload.title) {
+			this.list = this.list.map((n) =>
+				n.id === noteId ? { ...n, title: payload.title } : n,
+			);
+		}
+		if (this.editingId === noteId) {
+			this.remoteSavedApplier?.(noteId, payload);
+			this.rotateUploadSession();
+		}
+	}
+
+	applyRemoteDeleted(noteId: string) {
+		runInAction(() => {
+			if (this.preview?.id === noteId) this.preview = null;
+			if (this.editingId === noteId) {
+				this.editingId = null;
+				this.editorInitial = EMPTY_NOTE_DOC;
+				this.editorSeed += 1;
+			}
+			if (this.boundNoteId === noteId) this.boundNoteId = null;
+			if (this.pendingDeleteId === noteId) {
+				this.pendingDeleteId = null;
+				this.confirmOpen = false;
+			}
+			this.list = this.list.filter((n) => n.id !== noteId);
+		});
+		void this.discardUploadSession();
+	}
+
 	async loadMore(): Promise<void> {
 		if (!this.hasMore || this.loading || this.refreshing || this.loadingMore)
 			return;
@@ -268,7 +461,10 @@ class LearningNotesStore {
 		await this.leaveEditor();
 		this.preview = null;
 		this.editingId = null;
-		this.uploadSessionId = crypto.randomUUID();
+		this.bindNoteId(null);
+		this.pendingPeerDraft = null;
+		this.savedBaselineHtml = null;
+		this.rotateUploadSession();
 		this.editorInitial = EMPTY_NOTE_DOC;
 		this.editorSeed += 1;
 	}
@@ -279,7 +475,18 @@ class LearningNotesStore {
 		const listHit = this.list.find((n) => n.id === id);
 		// 立刻进入预览壳：卸掉编辑器，避免与即将挂载的预览双实例并存
 		runInAction(() => {
+			this.bindNoteId(id);
+			// 预览其他篇时清空 editingId，并卸掉旧正文，避免无 id 编辑器残留后误走新建
+			if (this.editingId !== id) {
+				this.editingId = null;
+				this.editorInitial = EMPTY_NOTE_DOC;
+				this.editorSeed += 1;
+			}
 			this.loadingDetail = true;
+			this.savedBaselineHtml = null;
+			if (this.pendingPeerDraft?.noteId !== id) {
+				this.pendingPeerDraft = null;
+			}
 			this.preview = {
 				id,
 				title: listHit?.title ?? this.preview?.title ?? '',
@@ -299,8 +506,28 @@ class LearningNotesStore {
 		try {
 			const note = await this.api.detail(id);
 			runInAction(() => {
-				// 慢网下用户可能已点开另一篇
-				if (this.preview?.id === id) this.preview = note;
+				if (this.preview?.id !== id) return;
+				const peer =
+					this.pendingPeerDraft?.noteId === id ? this.pendingPeerDraft : null;
+				const serverHtml = note.html || '';
+				this.savedBaselineHtml = serverHtml;
+				this.bindNoteId(id);
+				// 对端未保存草稿优先于服务端旧正文
+				this.preview = peer
+					? {
+							...note,
+							html: peer.html,
+							title: peer.title.trim() || note.title,
+						}
+					: note;
+				if (peer && peer.dirty !== false) {
+					this.pendingPeerDraft = {
+						...peer,
+						baselineHtml: serverHtml,
+					};
+				} else {
+					this.pendingPeerDraft = null;
+				}
 			});
 		} catch {
 			// Host http 已 Toast（如「笔记不存在」）
@@ -320,10 +547,43 @@ class LearningNotesStore {
 		await this.leaveEditor();
 		this.preview = null;
 		this.editingId = note.id;
-		this.uploadSessionId = crypto.randomUUID();
-		this.editorInitial = note.html || EMPTY_NOTE_DOC;
-		// 预览态编辑器已卸载，重新挂载时用 editorInitial；seed 保证同 key 残留实例也被清掉
+		this.bindNoteId(note.id);
+		this.rotateUploadSession();
+		const peer =
+			this.pendingPeerDraft?.noteId === note.id ? this.pendingPeerDraft : null;
+		this.pendingPeerDraft = null;
+
+		const draftHtml =
+			(typeof note.html === 'string' && note.html) ||
+			peer?.html ||
+			EMPTY_NOTE_DOC;
+		const baselineHtml =
+			peer?.baselineHtml ||
+			this.savedBaselineHtml ||
+			(typeof note.html === 'string' ? note.html : '');
+		this.savedBaselineHtml = null;
+
+		const draftStr = typeof draftHtml === 'string' ? draftHtml : '';
+		const hasUnsaved =
+			Boolean(baselineHtml) &&
+			draftStr !== baselineHtml &&
+			peer?.dirty !== false;
+
+		// 有未保存草稿时先挂服务端基线，再套草稿，避免把草稿当成基线导致脏标记闪灭
+		this.editorInitial = hasUnsaved ? baselineHtml : draftHtml;
 		this.editorSeed += 1;
+
+		if (hasUnsaved) {
+			const draft = {
+				html: draftStr,
+				title: peer?.title || note.title || '',
+				uploadSessionId: peer?.uploadSessionId,
+				dirty: true as boolean | undefined,
+			};
+			queueMicrotask(() => {
+				if (this.editingId === note.id) this.applyRemoteDraft(note.id, draft);
+			});
+		}
 	}
 
 	async openEditById(id: string): Promise<void> {
@@ -375,11 +635,13 @@ class LearningNotesStore {
 				html: input.html,
 				uploadSessionId: sessionId,
 			};
-			if (this.editingId) {
-				const updated = await this.api.update(this.editingId, payload);
+			const noteId = this.saveTargetId;
+			if (noteId) {
+				const updated = await this.api.update(noteId, payload);
 				runInAction(() => {
 					this.editingId = updated.id;
-					this.uploadSessionId = crypto.randomUUID();
+					this.bindNoteId(updated.id);
+					this.rotateUploadSession();
 				});
 				if (opts?.auto) {
 					this.toast(this.t('learningNotes.toast.autoSaved'), 'success');
@@ -390,7 +652,8 @@ class LearningNotesStore {
 				const { id } = await this.api.save(payload);
 				runInAction(() => {
 					this.editingId = id;
-					this.uploadSessionId = crypto.randomUUID();
+					this.bindNoteId(id);
+					this.rotateUploadSession();
 				});
 				if (opts?.auto) {
 					this.toast(this.t('learningNotes.toast.autoSaved'), 'success');
@@ -532,10 +795,10 @@ class LearningNotesStore {
 		}
 		try {
 			if (!this.uploadSessionId) {
-				this.uploadSessionId = crypto.randomUUID();
+				this.rotateUploadSession();
 			}
 			return await this.api.uploadImage(file, {
-				noteId: noteId ?? this.editingId,
+				noteId: noteId ?? this.saveTargetId,
 				uploadSessionId: this.uploadSessionId,
 			});
 		} catch (e) {
@@ -561,8 +824,11 @@ class LearningNotesStore {
 	/** 放弃当前上传会话的 pending（切笔记 / 新建时调用） */
 	async discardUploadSession(): Promise<void> {
 		const sid = this.uploadSessionId;
+		const owned = this.uploadSessionOwned;
 		this.uploadSessionId = null;
-		if (!sid || !this.api) return;
+		this.uploadSessionOwned = true;
+		// 对端 adopt 的会话不可 DELETE，否则会误删上传方仍在用的 pending 图
+		if (!sid || !owned || !this.api) return;
 		try {
 			await this.api.discardUploadSession(sid);
 		} catch {
@@ -582,6 +848,7 @@ class LearningNotesStore {
 					this.editorInitial = EMPTY_NOTE_DOC;
 					this.editorSeed += 1;
 				}
+				if (this.boundNoteId === id) this.boundNoteId = null;
 				this.pendingDeleteId = null;
 			});
 			this.toast(this.t('learningNotes.toast.deleted'), 'success');

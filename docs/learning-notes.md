@@ -1,6 +1,9 @@
 # 学习笔记 (Learning Notes) 实现文档
 
-> 延伸阅读：图片上传与孤儿回收的会话级实现见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)。
+> 延伸阅读：
+> - 图片上传与孤儿回收的会话级实现见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)。
+> - 切笔记/离页三层自动保存与 keepalive 兜底见 [笔记自动保存与离页保存](./learning-notes/笔记自动保存与离页保存.md)。
+> - Host 多窗口同一笔记草稿同步、脏标记仲裁、上传会话 adopt/rotate 见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)。
 
 ## 1. 概述
 
@@ -12,9 +15,10 @@
 - **三种视图模式**：笔记列表、编辑视图、预览视图
 - **长文分页保存**：`LargeNoteEditor` 实现滚动窗口式长文编辑，避免大数据量 DOM 渲染卡顿
 - **图片上传会话**：编辑器粘贴 / 拖放 / 选图走 `uploadSessionId` 生命周期，保存时认领、切笔记 / 关页时回收，避免 COS 孤儿图（详见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)）
+- **Host 多窗口草稿同步**：主站可弹出多窗口（主窗 + Popout）同时编辑同一笔记；草稿通过 `api.modules.learningNotes` Host 通道 debounce 广播，脏标记经 TipTap 规范化 + 远端锁三段仲裁不闪灭；上传会话跨窗 `adopt/rotate`，`owned` 状态防止 B 窗离开误删 A 窗 pending；`pendingPeerDraft + savedBaselineHtml` 保护预览态对端草稿不被 detail 接口覆盖（详见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)）
 - **DOCX 导出**：服务端生成 Word 文档，通过 Host `downloadBlob` API 落盘
 - **分屏布局**：`ResizablePanel` 可拖拽调整列表/编辑器宽度
-- **HostBridge 通信**：通过 `api.http` / `api.ui` / `api.event` 与主站宿主通信
+- **HostBridge 通信**：通过 `api.http` / `api.ui` / `api.event` / `api.modules` 与主站宿主通信
 - **国际化**：跟随 Host 语言环境，支持中文/英文
 
 ## 2. 架构设计
@@ -25,8 +29,9 @@
 graph TB
     subgraph Host["主站宿主 (Host)"]
         direction LR
-        HostAPI["api 对象<br/>http / ui / event"]
+        HostAPI["api 对象<br/>http / ui / event / modules.learningNotes"]
         HostUI["主站 UI<br/>Toast / 下载"]
+        HostSync["Host Sync Bus<br/>多窗口草稿 / saved / deleted 广播"]
     end
 
     subgraph Plugin["学习笔记插件 (Plugin)"]
@@ -34,13 +39,13 @@ graph TB
         subgraph View["视图层"]
             direction LR
             NotesListPanel["NotesListPanel<br/>笔记列表面板"]
-            EditorArea["编辑区域"]
+            EditorArea["编辑区域<br/>dirty 仲裁 + applyRemoteDraft/Saved"]
             PreviewArea["预览区域"]
         end
 
         subgraph Core["核心层"]
-            LearningNotesApp["LearningNotesApp<br/>主页面容器"]
-            LearningNotesStore["LearningNotesStore<br/>MobX 状态管理"]
+            LearningNotesApp["LearningNotesApp<br/>主页面容器 + useLearningNotesHostSync"]
+            LearningNotesStore["LearningNotesStore<br/>MobX 状态管理<br/>pendingPeerDraft / savedBaselineHtml / boundNoteId / uploadSessionOwned"]
             NotesApi["NotesApi<br/>HTTP 接口封装"]
         end
 
@@ -54,6 +59,7 @@ graph TB
         subgraph Utils["工具层"]
             DocUtils["utils/doc.ts<br/>长文分页算法"]
             PreviewHtml["previewHtml.ts<br/>HTML 预处理"]
+            HostSyncHook["useLearningNotesHostSync<br/>connectStore + publishDraft debounce"]
         end
 
         subgraph Design["设计系统"]
@@ -67,6 +73,8 @@ graph TB
     HostAPI -->|"http.get/post/put/delete"| NotesApi
     HostAPI -->|"ui.showToast / ui.downloadBlob"| LearningNotesApp
     HostAPI -->|"event.on('locale')"| LearningNotesApp
+    HostSync -->|"applyRemoteDraft / applyRemoteSaved / applyRemoteDeleted"| LearningNotesApp
+    LearningNotesApp --> HostSync
 
     LearningNotesApp --> LearningNotesStore
     LearningNotesStore --> NotesApi
@@ -89,11 +97,13 @@ graph TB
     LargeNoteEditor --> DocUtils
     WindowedPreviewBody --> DocUtils
     DocUtils --> PreviewHtml
+    LearningNotesApp --> HostSyncHook
 
     style Host fill:#f9f,stroke:#333,stroke-width:2px
     style Plugin fill:#bbf,stroke:#333,stroke-width:2px
     style Core fill:#bfb,stroke:#333,stroke-width:1px
     style EditorComponents fill:#fbf,stroke:#333,stroke-width:1px
+    style HostSync fill:#fca,stroke:#333,stroke-width:1px
 ```
 
 ### 2.2 核心流程图 — 笔记保存流程
@@ -112,16 +122,16 @@ flowchart TD
     H -->|否| I[Toast: 请输入标题]
     H -->|是| J{有正文内容?}
     J -->|否| K[Toast: 请输入内容]
-    J -->|是| L{有编辑ID?}
+    J -->|是| L{saveTargetId 存在?<br/>editingId ?? boundNoteId}
     L -->|是| M[api.update PUT（带 uploadSessionId）]
     L -->|否| N[api.save POST（带 uploadSessionId）]
-    M --> M2[轮换 uploadSessionId]
-    N --> N2[轮换 uploadSessionId]
+    M --> M2[bindNoteId + rotateUploadSession<br/>owned=true + 下一任新会话]
+    N --> N2[bindNoteId + rotateUploadSession]
     M2 --> O[Toast: 更新成功]
     N2 --> P[Toast: 保存成功]
     O --> Q[refreshList]
     P --> Q
-    Q --> R[markClean 清除脏状态]
+    Q --> R[markClean 清除脏状态 + 解远端锁 + 清 pending]
     G --> S[结束]
     I --> S
     K --> S
@@ -133,20 +143,35 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant App as LearningNotesApp
+    participant App as LearningNotesApp + useLearningNotesHostSync
     participant Store as LearningNotesStore
     participant Api as NotesApi
-    participant Host as Host HTTP
+    participant Host as Host HTTP + Sync Bus
+    participant Peer as 对端窗口(同篇)
 
     User->>App: 点击笔记列表项
+    App->>Host: publishSelection(noteId, mode: preview|edit)<br/>+ requestState(noteId) 并置 1s 外发抑制
+    Peer-->>Host: state-snapshot 回包
+    Host-->>App: state-snapshot<br/>(endAwaitRemoteSnapshot)
+    Peer-->>Host: 如有未保存则 publishDraft
     App->>Store: openPreview(id)
-    Store->>Store: loadingDetail = true
-    Store->>Store: preview = 壳子 (带标题占位)
+    Store->>Store: bindNoteId(id)<br/>rotateUploadSession<br/>loadingDetail=true<br/>preview = 壳子(标题占位)
+    alt 对端草稿先于 detail 到达
+      Host-->>App: applyRemoteDraft(noteId, draft)
+      App->>Store: applyRemoteDraft
+      Store->>Store: pendingPeerDraft = draft
+    end
     Store->>Api: detail(id)
     Api->>Host: GET /english-learning/notes/detail/{id}
     Host-->>Api: { data: { id, title, content, ... } }
     Api-->>Store: toNote(note)
-    Store->>Store: preview = note (完整数据)
+    Store->>Store: savedBaselineHtml = serverHtml
+    alt pendingPeerDraft 存在(草稿优先)
+      Store->>Store: preview = { ...note, html:pendingPeerDraft.html, title:pendingPeerDraft.title }
+      Store->>Store: pendingPeerDraft.baselineHtml = serverHtml（保留供预览→编辑）
+    else 无草稿
+      Store->>Store: preview = note
+    end
     Store->>Store: loadingDetail = false
     App->>App: 渲染 NotePreview(html)
     NotePreview->>NotePreview: preparePreviewBody 处理

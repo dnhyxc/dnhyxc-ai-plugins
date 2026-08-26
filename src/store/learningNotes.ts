@@ -49,7 +49,18 @@ class LearningNotesStore {
 	private t: TFn = translateSync;
 	/** Host 透传的 downloadBlob（Web / Tauri2）；独立预览可由 mock 注入 */
 	private downloadBlob: HostDownloadBlob | null = null;
+	private syncPublish: {
+		saved?: (payload: { noteId: string; html: string; title: string }) => void;
+		deleted?: (noteId: string) => void;
+		listChanged?: (reason?: string) => void;
+	} | null = null;
 	private editorSnapshotReader: (() => NoteEditorSnapshot | null) | null = null;
+	/**
+	 * 编辑过程中缓存的离页快照。SPA 路由离开时编辑器先卸载，
+	 * takeEditorSnapshot 会读空，需靠此缓存才能自动保存。
+	 */
+	private leaveSnap: (NoteEditorSnapshot & { noteId: string | null }) | null =
+		null;
 	private remoteDraftApplier:
 		| ((
 				noteId: string,
@@ -129,13 +140,92 @@ class LearningNotesStore {
 		if (t) this.t = t;
 	}
 
+	/** 跨窗同步：保存/删除后由插件显式 publish（不再依赖 Host HTTP 包装） */
+	bindSyncPublish(
+		sync: {
+			saved?: (payload: {
+				noteId: string;
+				html: string;
+				title: string;
+			}) => void;
+			deleted?: (noteId: string) => void;
+			listChanged?: (reason?: string) => void;
+		} | null,
+	) {
+		this.syncPublish = sync;
+	}
+
 	registerEditorSnapshot(fn: (() => NoteEditorSnapshot | null) | null): void {
 		this.editorSnapshotReader = fn;
 	}
 
-	/** Host / 关窗：读取当前编辑器快照 */
+	/** 关窗 / 跨窗 snapshot：优先读编辑器；已卸载则回落到离页缓存 */
 	takeEditorSnapshot(): NoteEditorSnapshot | null {
-		return this.editorSnapshotReader?.() ?? null;
+		const live = this.editorSnapshotReader?.() ?? null;
+		if (live) return live;
+		const stashed = this.leaveSnap;
+		if (!stashed) return null;
+		const target = this.editingId ?? this.boundNoteId;
+		// 切篇空隙：缓存仍是上一篇时不得用于当前 id
+		if (stashed.noteId !== target) return null;
+		return stashed;
+	}
+
+	/** 编辑 onChange 时写入；预览/无效编辑器时清掉 */
+	stashLeaveSnap(
+		snap: (NoteEditorSnapshot & { noteId: string | null }) | null,
+	): void {
+		this.leaveSnap = snap;
+	}
+
+	/** SPA 离页：用缓存快照静默保存（编辑器可能已卸载） */
+	async flushLeaveSnap(): Promise<boolean> {
+		if (this.saving || this.preview) return false;
+		const snap = this.takeEditorSnapshot();
+		if (!snap?.dirty) return false;
+		if (!hasNoteBodyContent(snap.html, snap.text) && !snap.title.trim()) {
+			return false;
+		}
+		const ok = await this.saveNote(
+			{
+				title: snap.title,
+				html: snap.html,
+				text: snap.text,
+				dirty: true,
+			},
+			{ silent: true, auto: true },
+		);
+		if (ok && this.leaveSnap) {
+			this.leaveSnap = { ...this.leaveSnap, dirty: false };
+		}
+		return ok;
+	}
+
+	/**
+	 * 离开学习笔记页：清编辑/预览选中态（保留 listOpen）。
+	 * 重进不再挂着旧 editingId + editorInitial，避免用过期正文顶掉服务端最新稿。
+	 */
+	resetEditorSession(): void {
+		this.preview = null;
+		this.editingId = null;
+		this.boundNoteId = null;
+		this.pendingPeerDraft = null;
+		this.savedBaselineHtml = null;
+		this.leaveSnap = null;
+		this.loadingDetail = false;
+		this.confirmOpen = false;
+		this.pendingDeleteId = null;
+		this.visibilityConfirmOpen = false;
+		this.pendingVisibility = null;
+		this.editorInitial = EMPTY_NOTE_DOC;
+		this.editorSeed += 1;
+		void this.discardUploadSession();
+	}
+
+	/** 离页：先保存脏稿，再清选中（顺序不能反，否则 saveTargetId 丢失会误新建） */
+	async leavePage(): Promise<void> {
+		await this.flushLeaveSnap();
+		this.resetEditorSession();
 	}
 
 	registerRemoteDraftApplier(
@@ -464,6 +554,7 @@ class LearningNotesStore {
 		this.bindNoteId(null);
 		this.pendingPeerDraft = null;
 		this.savedBaselineHtml = null;
+		this.leaveSnap = null;
 		this.rotateUploadSession();
 		this.editorInitial = EMPTY_NOTE_DOC;
 		this.editorSeed += 1;
@@ -627,6 +718,8 @@ class LearningNotesStore {
 			this.toast(this.t('learningNotes.toast.httpDeniedSave'), 'error');
 			return false;
 		}
+		// 离页时 unmount 会先卸 bindSyncPublish；await 前先抓住，否则对端收不到 saved
+		const sync = this.syncPublish;
 		this.saving = true;
 		try {
 			const sessionId = this.uploadSessionId;
@@ -636,8 +729,12 @@ class LearningNotesStore {
 				uploadSessionId: sessionId,
 			};
 			const noteId = this.saveTargetId;
+			let savedId = noteId;
+			const savedHtml = payload.html;
+			const savedTitle = payload.title;
 			if (noteId) {
 				const updated = await this.api.update(noteId, payload);
+				savedId = updated.id;
 				runInAction(() => {
 					this.editingId = updated.id;
 					this.bindNoteId(updated.id);
@@ -650,6 +747,7 @@ class LearningNotesStore {
 				}
 			} else {
 				const { id } = await this.api.save(payload);
+				savedId = id;
 				runInAction(() => {
 					this.editingId = id;
 					this.bindNoteId(id);
@@ -660,6 +758,21 @@ class LearningNotesStore {
 				} else if (!opts?.silent) {
 					this.toast(this.t('learningNotes.toast.saved'), 'success');
 				}
+			}
+			if (savedId) {
+				this.leaveSnap = {
+					noteId: savedId,
+					title: savedTitle,
+					html: savedHtml,
+					text: this.leaveSnap?.text ?? '',
+					dirty: false,
+				};
+				sync?.saved?.({
+					noteId: savedId,
+					html: savedHtml,
+					title: savedTitle,
+				});
+				sync?.listChanged?.(noteId ? 'update' : 'save');
 			}
 			if (!opts?.silent) {
 				await this.refreshList();
@@ -711,6 +824,7 @@ class LearningNotesStore {
 				this.pendingVisibility = null;
 				this.visibilityConfirmOpen = false;
 			});
+			this.syncPublish?.listChanged?.('visibility');
 			this.toast(
 				this.t(
 					pending.isPublic
@@ -851,6 +965,8 @@ class LearningNotesStore {
 				if (this.boundNoteId === id) this.boundNoteId = null;
 				this.pendingDeleteId = null;
 			});
+			this.syncPublish?.deleted?.(id);
+			this.syncPublish?.listChanged?.('delete');
 			this.toast(this.t('learningNotes.toast.deleted'), 'success');
 			await this.refreshList();
 		} catch {

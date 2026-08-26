@@ -3,7 +3,8 @@
 > 延伸阅读：
 > - 图片上传与孤儿回收的会话级实现见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)。
 > - 切笔记/离页三层自动保存与 keepalive 兜底见 [笔记自动保存与离页保存](./learning-notes/笔记自动保存与离页保存.md)。
-> - Host 多窗口同一笔记草稿同步、脏标记仲裁、上传会话 adopt/rotate 见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)。
+> - Host 多窗口同一笔记草稿同步、脏标记仲裁、上传会话 adopt/rotate（初始版 connectStore 绑定模式）见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)。
+> - subscribe 分发重构、Store 自发广播 saved/deleted、leaveSnap 离页快照、编辑器 epoch 守卫见 [跨窗同步重构与离页快照](./learning-notes/跨窗同步重构与离页快照.md)。
 
 ## 1. 概述
 
@@ -15,7 +16,7 @@
 - **三种视图模式**：笔记列表、编辑视图、预览视图
 - **长文分页保存**：`LargeNoteEditor` 实现滚动窗口式长文编辑，避免大数据量 DOM 渲染卡顿
 - **图片上传会话**：编辑器粘贴 / 拖放 / 选图走 `uploadSessionId` 生命周期，保存时认领、切笔记 / 关页时回收，避免 COS 孤儿图（详见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)）
-- **Host 多窗口草稿同步**：主站可弹出多窗口（主窗 + Popout）同时编辑同一笔记；草稿通过 `api.modules.learningNotes` Host 通道 debounce 广播，脏标记经 TipTap 规范化 + 远端锁三段仲裁不闪灭；上传会话跨窗 `adopt/rotate`，`owned` 状态防止 B 窗离开误删 A 窗 pending；`pendingPeerDraft + savedBaselineHtml` 保护预览态对端草稿不被 detail 接口覆盖（详见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)）
+- **Host 多窗口草稿同步**：主站可弹出多窗口（主窗 + Popout）同时编辑同一笔记；草稿通过 `api.modules.learningNotes` Host sync bus debounce 广播，脏标记经 TipTap 规范化 + 远端锁三段仲裁不闪灭；上传会话跨窗 `adopt/rotate`，`owned` 状态防止 B 窗离开误删 A 窗 pending；`pendingPeerDraft + savedBaselineHtml` 保护预览态对端草稿不被 detail 接口覆盖；重构后 Hook 迁至 `src/hooks/useNoteHostSync.ts`，subscribe 分发替代 connectStore 绑定，Store 通过 `bindSyncPublish` 自发广播 saved/deleted/listChanged，`leaveSnap` 缓存 + `leavePage` 保证 SPA 路由离开不丢稿，编辑器 epoch 守卫防止切篇空隙脏读（详见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md) 与 [跨窗同步重构与离页快照](./learning-notes/跨窗同步重构与离页快照.md)）
 - **DOCX 导出**：服务端生成 Word 文档，通过 Host `downloadBlob` API 落盘
 - **分屏布局**：`ResizablePanel` 可拖拽调整列表/编辑器宽度
 - **HostBridge 通信**：通过 `api.http` / `api.ui` / `api.event` / `api.modules` 与主站宿主通信
@@ -45,7 +46,7 @@ graph TB
 
         subgraph Core["核心层"]
             LearningNotesApp["LearningNotesApp<br/>主页面容器 + useLearningNotesHostSync"]
-            LearningNotesStore["LearningNotesStore<br/>MobX 状态管理<br/>pendingPeerDraft / savedBaselineHtml / boundNoteId / uploadSessionOwned"]
+            LearningNotesStore["LearningNotesStore<br/>MobX 状态管理<br/>syncPublish / leaveSnap / pendingPeerDraft / savedBaselineHtml / boundNoteId / uploadSessionOwned"]
             NotesApi["NotesApi<br/>HTTP 接口封装"]
         end
 
@@ -59,7 +60,7 @@ graph TB
         subgraph Utils["工具层"]
             DocUtils["utils/doc.ts<br/>长文分页算法"]
             PreviewHtml["previewHtml.ts<br/>HTML 预处理"]
-            HostSyncHook["useLearningNotesHostSync<br/>connectStore + publishDraft debounce"]
+            HostSyncHook["useNoteHostSync<br/>subscribe 分发 + publishDraft debounce + leavePage"]
         end
 
         subgraph Design["设计系统"]

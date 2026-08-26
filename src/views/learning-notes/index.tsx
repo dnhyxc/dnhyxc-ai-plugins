@@ -16,6 +16,7 @@ import {
 	SquarePen,
 	Trash2,
 } from 'lucide-react';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Confirm from '@/components/design/Confirm';
@@ -25,6 +26,12 @@ import {
 	ResizablePanelGroup,
 } from '@/components/ui/resizable';
 import { useHostLocale, useI18n } from '@/hooks';
+import {
+	cancelScheduledLearningNotesDraftPublish,
+	type HostApi,
+	scheduleLearningNotesDraftPublish,
+	useLearningNotesHostSync,
+} from '@/hooks/useNoteHostSync';
 import type { Locale } from '@/i18n';
 import { cn } from '@/lib/utils';
 import useStore from '@/store';
@@ -33,11 +40,6 @@ import type { HostHttp } from './api';
 import { LargeNoteEditor, type LargeNoteSaveApi } from './components/Editor';
 import { NotesListPanel } from './components/NotesListPanel';
 import { WindowedPreviewBody } from './components/PreviewBody';
-import {
-	type HostApi,
-	scheduleLearningNotesDraftPublish,
-	useLearningNotesHostSync,
-} from './useLearningNotesHostSync';
 import { isLargeNoteHtml } from './utils';
 import '@/styles.css';
 
@@ -90,6 +92,11 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	const editorRef = useRef<Editor | null>(null);
 	const pagedSaveRef = useRef<LargeNoteSaveApi | null>(null);
+	/** 当前编辑器绑定的笔记 id（新建为 null）；须与 saveTargetId 一致才可读快照 */
+	const editorBoundNoteIdRef = useRef<string | null>(null);
+	/** 切篇时 +1；onReady 对齐后才允许读编辑器，避免旧标题写入新 noteId */
+	const editorEpochRef = useRef(0);
+	const editorReadyEpochRef = useRef(-1);
 	const savingRef = useRef(false);
 	const previewRef = useRef(store.preview);
 	/** TipTap 规范化后的干净基线（syncDirty 优先用这个，避免和服务器原始 HTML 字符串对不上） */
@@ -144,7 +151,41 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		pendingRemoteCleanRef.current = false;
 		pendingRemoteBaselineRef.current = '';
 		setDirty(false);
-	}, [alignCleanBaseline, currentHtml]);
+
+		// 作废未发出的 dirty:true 防抖；并广播 dirty:false，对端对齐基线熄灭脏标
+		cancelScheduledLearningNotesDraftPublish();
+		const noteId = store.editingId;
+		if (!noteId) return;
+		const paged = pagedSaveRef.current;
+		const editor = editorRef.current;
+		if (paged) {
+			scheduleLearningNotesDraftPublish(
+				api,
+				{
+					noteId,
+					title: paged.getTitle(),
+					html: paged.getHTML(),
+					text: paged.getText(),
+				},
+				store.uploadSessionId,
+				false,
+			);
+			return;
+		}
+		if (editor && !editor.isDestroyed) {
+			scheduleLearningNotesDraftPublish(
+				api,
+				{
+					noteId,
+					title: getDocTitleText(editor.state.doc).trim(),
+					html: editor.getHTML(),
+					text: editor.getText({ blockSeparator: '\n\n' }).trim(),
+				},
+				store.uploadSessionId,
+				false,
+			);
+		}
+	}, [alignCleanBaseline, api, currentHtml, store]);
 
 	const applyEditorReadyDirty = useCallback(
 		(html: string) => {
@@ -186,6 +227,41 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		[alignCleanBaseline],
 	);
 
+	/**
+	 * 换篇 / 进预览时立刻丢掉旧编辑器句柄（早于 React commit/onReady）。
+	 * 只盯 editorSeed + preview：新建首次保存会写 editingId，不能因此打断当前编辑器。
+	 */
+	useEffect(() => {
+		return reaction(
+			() => `${store.preview?.id ?? ''}:${store.editorSeed}`,
+			() => {
+				editorEpochRef.current += 1;
+				pagedSaveRef.current = null;
+				editorRef.current = null;
+				editorBoundNoteIdRef.current = null;
+			},
+		);
+	}, [store]);
+
+	/** 新建首次保存后：同一编辑器实例补上 noteId 绑定 */
+	useEffect(() => {
+		return reaction(
+			() => store.editingId,
+			(id) => {
+				if (editorReadyEpochRef.current !== editorEpochRef.current) return;
+				if (editorBoundNoteIdRef.current == null && id) {
+					editorBoundNoteIdRef.current = id;
+				}
+			},
+		);
+	}, [store]);
+
+	const editorMatchesTarget = useCallback(() => {
+		if (editorReadyEpochRef.current !== editorEpochRef.current) return false;
+		const targetId = store.editingId ?? store.boundNoteId;
+		return editorBoundNoteIdRef.current === targetId;
+	}, [store]);
+
 	/** 切笔记时重置基线，避免沿用上一篇的 baseline / dirty */
 	useEffect(() => {
 		const initial =
@@ -202,7 +278,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	const readDraft = useCallback(() => {
 		const noteId = store.editingId;
-		if (!noteId) return null;
+		if (
+			!noteId ||
+			!editorMatchesTarget() ||
+			editorBoundNoteIdRef.current !== noteId
+		) {
+			return null;
+		}
 		const paged = pagedSaveRef.current;
 		if (paged) {
 			return {
@@ -220,7 +302,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 			text: editor.getText({ blockSeparator: '\n\n' }).trim(),
 			html: editor.getHTML(),
 		};
-	}, [store.editingId]);
+	}, [editorMatchesTarget, store.editingId]);
 
 	const syncDirty = useCallback(() => {
 		if (applyingRemoteRef.current) return;
@@ -240,6 +322,30 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		if (wasDirty && !nextDirty) {
 			void store.settleUploadSessionIfNeeded(html);
 		}
+
+		// 缓存离页快照：路由离开时编辑器已卸，靠它自动保存
+		if (!store.preview && editorMatchesTarget()) {
+			const paged = pagedSaveRef.current;
+			const editor = editorRef.current;
+			if (paged) {
+				store.stashLeaveSnap({
+					noteId: store.editingId ?? store.boundNoteId,
+					title: paged.getTitle(),
+					html: paged.getHTML(),
+					text: paged.getText(),
+					dirty: nextDirty,
+				});
+			} else if (editor && !editor.isDestroyed) {
+				store.stashLeaveSnap({
+					noteId: store.editingId ?? store.boundNoteId,
+					title: getDocTitleText(editor.state.doc).trim(),
+					html: editor.getHTML(),
+					text: editor.getText({ blockSeparator: '\n\n' }).trim(),
+					dirty: nextDirty,
+				});
+			}
+		}
+
 		const draft = readDraft();
 		// dirty→clean（如删回已保存内容）也要广播，否则对端仍留脏标记
 		if (draft && (nextDirty || wasDirty)) {
@@ -250,15 +356,54 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				nextDirty,
 			);
 		}
-	}, [alignCleanBaseline, api, currentHtml, readDraft, store]);
+	}, [
+		alignCleanBaseline,
+		api,
+		currentHtml,
+		editorMatchesTarget,
+		readDraft,
+		store,
+	]);
 
 	useEffect(() => {
 		store.bind(api.http, toast, t, api.ui?.downloadBlob);
-	}, [api.http, api.ui?.downloadBlob, toast, t]);
+	}, [api.http, api.ui?.downloadBlob, toast, t, store]);
+
+	/** 再次进入且列表仍开着：拉最新（单例 store 会保留 listOpen，不会再走 setListOpen） */
+	useEffect(() => {
+		if (!api.http || !store.listOpen) return;
+		void store.refreshList();
+	}, [api.http, store]);
+
+	/** SPA 离开学习笔记：先通知对端清脏，再异步保存（unmount 会立刻卸 syncPublish） */
+	useEffect(() => {
+		return () => {
+			cancelScheduledLearningNotesDraftPublish();
+			const noteId = store.editingId ?? store.boundNoteId;
+			const snap = store.takeEditorSnapshot();
+			// 同步广播 dirty:false，子窗立刻熄灭变更标（不等 HTTP）
+			if (noteId && snap && !store.preview) {
+				scheduleLearningNotesDraftPublish(
+					api,
+					{
+						noteId,
+						title: snap.title,
+						html: snap.html,
+						text: snap.text,
+					},
+					store.uploadSessionId,
+					false,
+				);
+			}
+			void store.leavePage();
+		};
+	}, [api, store]);
 
 	useEffect(() => {
 		store.registerEditorSnapshot(() => {
 			if (store.preview) return null;
+			// 切篇空隙：editingId 已变但编辑器尚未 onReady，禁止用旧标题保存/同步
+			if (!editorMatchesTarget()) return null;
 			const paged = pagedSaveRef.current;
 			if (paged) {
 				return {
@@ -278,7 +423,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 			};
 		});
 		return () => store.registerEditorSnapshot(null);
-	}, [store.preview]);
+	}, [editorMatchesTarget, store.preview]);
 
 	useEffect(() => {
 		store.registerRemoteDraftApplier((noteId, draft) => {
@@ -307,6 +452,10 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				pendingRemoteCleanRef.current = true;
 				dirtyRef.current = false;
 				setDirty(false);
+				// remount 前先对齐基线，避免 onReady 在 forceClean 丢失时又因 html≠旧基线点亮
+				if (draft.html.trim()) {
+					alignCleanBaseline(draft.html);
+				}
 			}
 
 			if (paged || !editor || editor.isDestroyed) {
@@ -319,7 +468,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				}
 				return false;
 			}
-			if (editor.getHTML() === draft.html) {
+			if (editorHtmlEquals(editor.getHTML(), draft.html)) {
 				if (nextDirty) {
 					baselineHtmlRef.current = tipTapBase;
 				} else {
@@ -405,6 +554,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	}, []);
 
 	const onSave = useCallback(async () => {
+		if (!editorMatchesTarget()) return;
 		const paged = pagedSaveRef.current;
 		if (paged) {
 			const title = paged.getTitle();
@@ -429,7 +579,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		});
 		if (ok) markClean();
 		else if (dirty && !title) focusTitle();
-	}, [focusTitle, markClean, dirty]);
+	}, [dirty, editorMatchesTarget, focusTitle, markClean, store]);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -650,6 +800,8 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 											onReady={(e, save) => {
 												editorRef.current = e;
 												pagedSaveRef.current = save;
+												editorBoundNoteIdRef.current = store.editingId;
+												editorReadyEpochRef.current = editorEpochRef.current;
 												applyEditorReadyDirty(save.getHTML());
 												setReadyKey(editorKey);
 											}}
@@ -670,6 +822,8 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 											onCreate={(e) => {
 												editorRef.current = e;
 												pagedSaveRef.current = null;
+												editorBoundNoteIdRef.current = store.editingId;
+												editorReadyEpochRef.current = editorEpochRef.current;
 												applyEditorReadyDirty(e.getHTML());
 												setReadyKey(editorKey);
 											}}
@@ -729,7 +883,10 @@ LearningNotesApp.activate = async (api: HostBridgeProps['api']) => {
 };
 
 LearningNotesApp.deactivate = () => {
-	void learningNotesStore.autoSaveIfDirty({ silent: true });
+	void learningNotesStore.leavePage().finally(() => {
+		// 保留 listOpen，只丢列表缓存，下次进入若仍开着会重新拉
+		learningNotesStore.clearList();
+	});
 };
 
 export default observer(LearningNotesApp);

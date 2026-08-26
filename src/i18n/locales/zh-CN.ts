@@ -57,6 +57,7 @@ const zhCN: Record<string, string> = {
 	'learningNotes.empty': '暂无笔记，保存一条试试',
 	'learningNotes.placeholder': '记下今天的单词、语法或口语收获…',
 	'learningNotes.new': '新建笔记',
+	'learningNotes.popout': '独立打开',
 	'learningNotes.edit': '编辑',
 	'learningNotes.makePublic': '公开',
 	'learningNotes.makePrivate': '取消公开',

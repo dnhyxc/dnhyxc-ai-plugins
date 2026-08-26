@@ -8,6 +8,7 @@ import {
 	richEditorLocaleOf,
 } from '@design/RichEditor';
 import {
+	AppWindow,
 	Eye,
 	FileDown,
 	FilePenLine,
@@ -43,6 +44,7 @@ import { WindowedPreviewBody } from './components/PreviewBody';
 import { isLargeNoteHtml } from './utils';
 import '@/styles.css';
 
+/** Host 桥接 props 类型 */
 type HostBridgeProps = {
 	api: HostApi & {
 		theme: 'light' | 'dark';
@@ -84,6 +86,7 @@ function editorHtmlEquals(a: string, b: string): boolean {
 	return norm(a) === norm(b);
 }
 
+/** 学习笔记应用组件 */
 function LearningNotesApp({ api }: HostBridgeProps) {
 	const { learningNotesStore: store } = useStore();
 	const { t, locale } = useI18n();
@@ -156,6 +159,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		cancelScheduledLearningNotesDraftPublish();
 		const noteId = store.editingId;
 		if (!noteId) return;
+		// 干净态写入共享原始基线，主/子窗脏判断共用
+		const draftTitle =
+			pagedSaveRef.current?.getTitle?.() ??
+			(editorRef.current && !editorRef.current.isDestroyed
+				? getDocTitleText(editorRef.current.state.doc).trim()
+				: '');
+		store.captureNoteOrigin(noteId, html, draftTitle);
 		const paged = pagedSaveRef.current;
 		const editor = editorRef.current;
 		if (paged) {
@@ -189,21 +199,47 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 	const applyEditorReadyDirty = useCallback(
 		(html: string) => {
+			const noteId = store.editingId;
+			const title =
+				editorRef.current && !editorRef.current.isDestroyed
+					? getDocTitleText(editorRef.current.state.doc).trim()
+					: '';
+			// 首窗 TipTap 规范化抢占共享基线；他窗沿用已有那一份
+			if (noteId) {
+				store.ensureNoteOrigin(noteId, html, title);
+			}
+			const origin = noteId ? store.getNoteOrigin(noteId) : null;
+			const sharedBase = origin?.html ?? '';
+
 			const forceClean = pendingRemoteCleanRef.current;
 			pendingRemoteCleanRef.current = false;
 			if (forceClean) {
 				remoteDirtyLockRef.current = false;
 				pendingRemoteDirtyRef.current = false;
 				pendingRemoteBaselineRef.current = '';
-				alignCleanBaseline(html);
+				alignCleanBaseline(sharedBase || html);
 				dirtyRef.current = false;
 				setDirty(false);
 				return;
 			}
 			const openBase = openBaselineRef.current;
-			const tipTapBase = baselineHtmlRef.current || openBase;
 			const pending = pendingRemoteDirtyRef.current;
 			pendingRemoteDirtyRef.current = false;
+			// 打开即为干净稿：对齐打开稿并刷新共享基线，避免 LS 陈旧 origin 误点亮
+			if (
+				noteId &&
+				!remoteDirtyLockRef.current &&
+				!pending &&
+				openBase &&
+				editorHtmlEquals(html, openBase)
+			) {
+				store.captureNoteOrigin(noteId, html, title);
+				alignCleanBaseline(html);
+				dirtyRef.current = false;
+				setDirty(false);
+				return;
+			}
+			const tipTapBase = sharedBase || baselineHtmlRef.current || openBase;
 			const shouldDirty =
 				remoteDirtyLockRef.current ||
 				pending ||
@@ -219,12 +255,12 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				setDirty(true);
 				return;
 			}
-			// 首次挂载干净：用 TipTap 序列化结果作基线，后续删回才能判干净
-			alignCleanBaseline(html);
+			// 干净：本地基线对齐共享原始基线
+			alignCleanBaseline(sharedBase || html);
 			dirtyRef.current = false;
 			setDirty(false);
 		},
-		[alignCleanBaseline],
+		[alignCleanBaseline, store],
 	);
 
 	/**
@@ -257,9 +293,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	}, [store]);
 
 	const editorMatchesTarget = useCallback(() => {
-		if (editorReadyEpochRef.current !== editorEpochRef.current) return false;
+		// 只比绑定 id：epoch 未对齐时 bound 已被清空，再卡 epoch 会导致快照读空，
+		// 进而 openPreview/detail 用服务端旧稿盖掉未保存正文
 		const targetId = store.editingId ?? store.boundNoteId;
-		return editorBoundNoteIdRef.current === targetId;
+		return (
+			editorBoundNoteIdRef.current != null &&
+			editorBoundNoteIdRef.current === targetId
+		);
 	}, [store]);
 
 	/** 切笔记时重置基线，避免沿用上一篇的 baseline / dirty */
@@ -307,15 +347,39 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	const syncDirty = useCallback(() => {
 		if (applyingRemoteRef.current) return;
 		const html = currentHtml();
-		// 优先 TipTap 基线；锁不参与脏判断，只防 remount 丢标记
-		const baseline = baselineHtmlRef.current || openBaselineRef.current;
-		const nextDirty = !editorHtmlEquals(html, baseline);
+		const noteId = store.editingId;
+		const openBase = openBaselineRef.current;
+		const origin = noteId ? store.getNoteOrigin(noteId) : null;
+		// 与打开稿一致则视为干净，避免 LS 陈旧 origin 误点亮
+		const nextDirty =
+			!remoteDirtyLockRef.current &&
+			openBase &&
+			editorHtmlEquals(html, openBase)
+				? false
+				: !editorHtmlEquals(
+						html,
+						origin?.html || baselineHtmlRef.current || openBase,
+					);
 		const wasDirty = dirtyRef.current;
 		if (!nextDirty) {
 			remoteDirtyLockRef.current = false;
 			pendingRemoteDirtyRef.current = false;
 			pendingRemoteCleanRef.current = false;
 			alignCleanBaseline(html);
+			if (
+				noteId &&
+				openBase &&
+				editorHtmlEquals(html, openBase) &&
+				origin &&
+				!editorHtmlEquals(html, origin.html)
+			) {
+				const title =
+					pagedSaveRef.current?.getTitle?.() ??
+					(editorRef.current && !editorRef.current.isDestroyed
+						? getDocTitleText(editorRef.current.state.doc).trim()
+						: '');
+				store.captureNoteOrigin(noteId, html, title);
+			}
 		}
 		dirtyRef.current = nextDirty;
 		setDirty(nextDirty);
@@ -324,12 +388,14 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		}
 
 		// 缓存离页快照：路由离开时编辑器已卸，靠它自动保存
-		if (!store.preview && editorMatchesTarget()) {
+		// 不卡 matches：只要还在编辑这篇且编辑器活着就写入，避免离页 takeEditorSnapshot 读空
+		if (!store.preview) {
+			const noteId = store.editingId ?? store.boundNoteId;
 			const paged = pagedSaveRef.current;
 			const editor = editorRef.current;
 			if (paged) {
 				store.stashLeaveSnap({
-					noteId: store.editingId ?? store.boundNoteId,
+					noteId,
 					title: paged.getTitle(),
 					html: paged.getHTML(),
 					text: paged.getText(),
@@ -337,7 +403,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				});
 			} else if (editor && !editor.isDestroyed) {
 				store.stashLeaveSnap({
-					noteId: store.editingId ?? store.boundNoteId,
+					noteId,
 					title: getDocTitleText(editor.state.doc).trim(),
 					html: editor.getHTML(),
 					text: editor.getText({ blockSeparator: '\n\n' }).trim(),
@@ -375,11 +441,39 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		void store.refreshList();
 	}, [api.http, store]);
 
-	/** SPA 离开学习笔记：先通知对端清脏，再异步保存（unmount 会立刻卸 syncPublish） */
+	useEffect(() => {
+		store.registerEditorSnapshot(() => {
+			if (store.preview) return null;
+			const noteId = store.editingId ?? store.boundNoteId;
+			// 新建笔记 editingId/bound 均为 null，与 editorBound 一致时仍可读
+			if (editorBoundNoteIdRef.current !== noteId) return null;
+			const paged = pagedSaveRef.current;
+			if (paged) {
+				return {
+					title: paged.getTitle(),
+					html: paged.getHTML(),
+					text: paged.getText(),
+					dirty: dirtyRef.current,
+				};
+			}
+			const editor = editorRef.current;
+			if (!editor || editor.isDestroyed) return null;
+			return {
+				title: getDocTitleText(editor.state.doc).trim(),
+				html: editor.getHTML(),
+				text: editor.getText({ blockSeparator: '\n\n' }).trim(),
+				dirty: dirtyRef.current,
+			};
+		});
+		return () => store.registerEditorSnapshot(null);
+	}, [store]);
+
+	/** SPA 离开学习笔记：先通知对端清脏，再保存（unmount 会立刻卸 syncPublish） */
 	useEffect(() => {
 		return () => {
 			cancelScheduledLearningNotesDraftPublish();
 			const noteId = store.editingId ?? store.boundNoteId;
+			// 此刻 registerEditorSnapshot 尚未卸（本 effect 后注册、先清理），优先 live；否则 leaveSnap
 			const snap = store.takeEditorSnapshot();
 			// 同步广播 dirty:false，子窗立刻熄灭变更标（不等 HTTP）
 			if (noteId && snap && !store.preview) {
@@ -400,32 +494,6 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	}, [api, store]);
 
 	useEffect(() => {
-		store.registerEditorSnapshot(() => {
-			if (store.preview) return null;
-			// 切篇空隙：editingId 已变但编辑器尚未 onReady，禁止用旧标题保存/同步
-			if (!editorMatchesTarget()) return null;
-			const paged = pagedSaveRef.current;
-			if (paged) {
-				return {
-					title: paged.getTitle(),
-					html: paged.getHTML(),
-					text: paged.getText(),
-					dirty: dirtyRef.current,
-				};
-			}
-			const editor = editorRef.current;
-			if (!editor || editor.isDestroyed) return null;
-			return {
-				title: getDocTitleText(editor.state.doc).trim(),
-				html: editor.getHTML(),
-				text: editor.getText({ blockSeparator: '\n\n' }).trim(),
-				dirty: dirtyRef.current,
-			};
-		});
-		return () => store.registerEditorSnapshot(null);
-	}, [editorMatchesTarget, store.preview]);
-
-	useEffect(() => {
 		store.registerRemoteDraftApplier((noteId, draft) => {
 			if (store.editingId !== noteId) return false;
 			const paged = pagedSaveRef.current;
@@ -437,11 +505,13 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 
 			store.adoptUploadSessionIdForSync(draft.uploadSessionId);
 
-			// dirty:false 权威清脏；否则正文相对 TipTap 基线（忽略对端误报的 dirty:true）
+			const origin = store.getNoteOrigin(noteId);
+			const sharedBase = origin?.html || tipTapBase;
+			// dirty:false 权威清脏；否则相对共享原始基线（主子窗同一份）
 			const nextDirty =
 				draft.dirty === false
 					? false
-					: !editorHtmlEquals(draft.html, tipTapBase);
+					: !editorHtmlEquals(draft.html, sharedBase);
 
 			if (nextDirty) {
 				remoteDirtyLockRef.current = true;
@@ -470,10 +540,18 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 			}
 			if (editorHtmlEquals(editor.getHTML(), draft.html)) {
 				if (nextDirty) {
-					baselineHtmlRef.current = tipTapBase;
+					baselineHtmlRef.current = sharedBase;
 				} else {
-					alignCleanBaseline(editor.getHTML());
+					const cleanHtml = draft.html || editor.getHTML();
+					alignCleanBaseline(cleanHtml);
 					pendingRemoteCleanRef.current = false;
+					if (cleanHtml.trim()) {
+						store.captureNoteOrigin(
+							noteId,
+							cleanHtml,
+							draft.title || origin?.title || '',
+						);
+					}
 				}
 				dirtyRef.current = nextDirty;
 				setDirty(nextDirty);
@@ -484,10 +562,16 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				editor.commands.setContent(draft.html, { emitUpdate: false });
 				const normalized = editor.getHTML();
 				if (nextDirty) {
-					baselineHtmlRef.current = tipTapBase;
+					baselineHtmlRef.current = sharedBase;
 				} else {
-					alignCleanBaseline(normalized);
+					const cleanHtml = draft.html || normalized;
+					alignCleanBaseline(cleanHtml);
 					pendingRemoteCleanRef.current = false;
+					store.captureNoteOrigin(
+						noteId,
+						cleanHtml,
+						draft.title || origin?.title || '',
+					);
 				}
 				dirtyRef.current = nextDirty;
 				setDirty(nextDirty);
@@ -514,11 +598,16 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 						applyingRemoteRef.current = false;
 					}
 				}
-				alignCleanBaseline(editor.getHTML());
+				const cleanHtml = editor.getHTML();
+				alignCleanBaseline(cleanHtml);
+				store.captureNoteOrigin(noteId, cleanHtml, payload.title || '');
 			} else if (html) {
 				alignCleanBaseline(html);
+				store.captureNoteOrigin(noteId, html, payload.title || '');
 			} else {
-				alignCleanBaseline(currentHtml());
+				const cleanHtml = currentHtml();
+				alignCleanBaseline(cleanHtml);
+				store.captureNoteOrigin(noteId, cleanHtml, payload.title || '');
 			}
 			dirtyRef.current = false;
 			remoteDirtyLockRef.current = false;
@@ -530,13 +619,15 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		return () => store.registerRemoteSavedApplier(null);
 	}, [alignCleanBaseline, currentHtml, store]);
 
-	/** 刷新/关页/离开 Host 路由：keepalive 自动保存 */
+	/** 刷新/关页：keepalive 自动保存（SPA 切路由另走 leavePage；勿依赖 preview 卸载监听） */
 	useEffect(() => {
-		if (store.preview) return;
-		const onPageHide = () => store.flushNoteOnPageHide();
+		const onPageHide = () => {
+			store.flushNoteOnPageHide();
+			store.releaseHeldOriginSession();
+		};
 		window.addEventListener('pagehide', onPageHide);
 		return () => window.removeEventListener('pagehide', onPageHide);
-	}, [store.preview]);
+	}, [store]);
 
 	const focusTitle = useCallback(() => {
 		const editor = editorRef.current;
@@ -609,12 +700,26 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		[store.listOpen, t],
 	);
 
+	const popoutBtn = useCallback(() => {
+		const mod = api.modules?.learningNotes;
+		if (!mod?.openPopoutWindow || mod.isPopoutWindow()) return null;
+		return (
+			<Btn
+				title={t('learningNotes.popout')}
+				onClick={() => void mod.openPopoutWindow?.()}
+			>
+				<AppWindow size={15} />
+			</Btn>
+		);
+	}, [api.modules?.learningNotes, t]);
+
 	const toolbarExtra = useMemo(
 		() => (
 			<>
 				<Btn title={t('learningNotes.new')} onClick={() => store.openNew()}>
 					<FilePenLine size={15} />
 				</Btn>
+				{popoutBtn()}
 				<Btn
 					title={
 						store.saving
@@ -653,6 +758,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 			dirty,
 			listToggleBtn,
 			onSave,
+			popoutBtn,
 			store.editingId,
 			store.saveTargetId,
 			store.saving,
@@ -667,6 +773,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 				<Btn title={t('learningNotes.new')} onClick={() => store.openNew()}>
 					<FilePenLine size={15} />
 				</Btn>
+				{popoutBtn()}
 				{previewOwned ? (
 					<>
 						<Btn
@@ -704,6 +811,7 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		),
 		[
 			listToggleBtn,
+			popoutBtn,
 			previewOwned,
 			store.exportingDocx,
 			store.loadingDetail,

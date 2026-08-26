@@ -27,9 +27,11 @@ type SyncMessage = {
 	preview?: { html: string; title: string };
 };
 
+/** 学习笔记 Host 模块类型 */
 type LearningNotesHostModule = {
 	getWindowId(): string;
 	isPopoutWindow(): boolean;
+	openPopoutWindow?(): Promise<void>;
 	consumeInitialNoteId(): string | null;
 	registerBeforeClose?(fn: () => void | Promise<void>): () => void;
 	sync: {
@@ -71,6 +73,7 @@ type LearningNotesHostModule = {
 	};
 };
 
+/** Host API 类型 */
 type HostApi = {
 	event?: {
 		on: (event: string, handler: (data?: unknown) => void) => void;
@@ -79,8 +82,10 @@ type HostApi = {
 	modules?: { learningNotes?: LearningNotesHostModule };
 };
 
+/** 学习笔记草稿读取器类型 */
 export type { HostApi };
 
+/** 学习笔记草稿读取器类型 */
 export type LearningNotesDraftReader = () => {
 	noteId: string;
 	html: string;
@@ -88,6 +93,7 @@ export type LearningNotesDraftReader = () => {
 	title: string;
 } | null;
 
+/** 草稿防抖延迟 */
 const DRAFT_DEBOUNCE_MS = 180;
 /** 切笔记后抑制外发草稿，避免把服务端旧正文推给对端覆盖未保存内容 */
 const SUPPRESS_DRAFT_AFTER_OPEN_MS = 1000;
@@ -131,7 +137,7 @@ function handleRemoteSyncMessage(
 			if (
 				msg.noteId &&
 				(getPreviewId(store) === msg.noteId ||
-					(Boolean(msg.html?.trim()) && getEditingId(store) === msg.noteId))
+					getEditingId(store) === msg.noteId)
 			) {
 				store.applyRemoteSaved(msg.noteId, {
 					html: msg.html ?? '',
@@ -255,19 +261,25 @@ async function saveLearningNotesOnWindowClose(
 		saved = Boolean(snap?.dirty);
 	}
 
+	/** 释放笔记原始基线会话 */
+	store.releaseHeldOriginSession();
+
 	if (saved) {
 		getHostModule(api)?.sync.publishListChanged?.('popout-close-save');
 	}
 }
 
+/** 开始等待远端快照 */
 function beginAwaitRemoteSnapshot() {
 	suppressDraftUntil = Date.now() + SUPPRESS_DRAFT_AFTER_OPEN_MS;
 }
 
+/** 结束等待远端快照 */
 function endAwaitRemoteSnapshot() {
 	suppressDraftUntil = 0;
 }
 
+/** 使用学习笔记 Host 同步 */
 export function useLearningNotesHostSync(
 	api: HostApi,
 	store: typeof LearningNotesStore,
@@ -283,6 +295,7 @@ export function useLearningNotesHostSync(
 		});
 
 		const localWindowId = mod.getWindowId();
+		store.bindLocalWindowId(localWindowId);
 		const disposers: Array<() => void> = [];
 
 		/** 订总线：入站分发 + 出站 snapshot 应答（原 connectStore + Host 分发） */
@@ -294,6 +307,7 @@ export function useLearningNotesHostSync(
 					publishLocalStateSnapshot(mod, store, msg.noteId);
 					return;
 				}
+
 				if (msg.type === 'selection' && msg.noteId) {
 					if (store.editingId !== msg.noteId) return;
 					const snap = store.takeEditorSnapshot();

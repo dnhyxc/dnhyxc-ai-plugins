@@ -2,6 +2,16 @@ import { EMPTY_NOTE_DOC } from '@design/RichEditor';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { translateSync } from '@/i18n';
 import {
+	acquireNoteOriginSession,
+	ensureSharedNoteOrigin,
+	getLocalNoteOriginWindowId,
+	type NoteOriginSnapshot,
+	readSharedNoteOrigin,
+	releaseNoteOriginSession,
+	removeNoteOriginSession,
+	writeSharedNoteOrigin,
+} from '@/utils/noteOrigin';
+import {
 	createNotesApi,
 	discardUploadSessionKeepalive,
 	type HostHttp,
@@ -87,6 +97,15 @@ class LearningNotesStore {
 	} | null = null;
 	/** 当前篇服务端干净正文（预览合并对端草稿后仍保留） */
 	private savedBaselineHtml: string | null = null;
+	/**
+	 * 当前篇共享原始基线（主/子窗同一份，存 localStorage）。
+	 * 脏判断只对比它，避免各窗本地 TipTap 基线漂移。
+	 */
+	private noteOrigin: NoteOriginSnapshot | null = null;
+	/** 与 Host learningNotesSyncBus 一致的本窗 windowId */
+	private localWindowId: string | null = null;
+	/** 本窗已通过 acquire 登记的 noteId（切篇/离页时 release） */
+	private heldOriginNoteId: string | null = null;
 
 	/** 列表（分页累积） */
 	list: Note[] = [];
@@ -155,19 +174,136 @@ class LearningNotesStore {
 		this.syncPublish = sync;
 	}
 
+	/** 由 useNoteHostSync 注入，与 Host getWindowId() 一致 */
+	bindLocalWindowId(windowId: string | null | undefined): void {
+		this.localWindowId = windowId?.trim() || null;
+	}
+
+	/**
+	 * 读取共享原始基线。优先 localStorage（主/子窗写入的权威源），
+	 * 避免内存缓存挡住对端刚写入的基线。
+	 */
+	getNoteOrigin(noteId: string | null | undefined): NoteOriginSnapshot | null {
+		if (!noteId) return null;
+		const shared = readSharedNoteOrigin(noteId);
+		if (shared) {
+			this.noteOrigin = shared;
+			return shared;
+		}
+		return this.noteOrigin?.noteId === noteId ? this.noteOrigin : null;
+	}
+
+	/**
+	 * 覆盖写入共享原始基线（保存成功 / 明确以服务端为准时）。
+	 * 主子窗经 localStorage 共用同一份。
+	 */
+	captureNoteOrigin(noteId: string, html: string, title: string): void {
+		if (!noteId) return;
+		const snap = writeSharedNoteOrigin(noteId, html, title);
+		if (snap) {
+			this.noteOrigin = snap;
+			this.savedBaselineHtml = html;
+		}
+	}
+
+	/**
+	 * 尚无共享基线时写入（首窗编辑器 ready 后 TipTap 规范化稿抢占）。
+	 * 他窗打开同篇时沿用已有基线，不再各自重建。
+	 */
+	ensureNoteOrigin(
+		noteId: string,
+		html: string,
+		title: string,
+	): NoteOriginSnapshot | null {
+		if (!noteId) return null;
+		const snap = ensureSharedNoteOrigin(noteId, html, title);
+		if (snap) {
+			this.noteOrigin = snap;
+			if (!this.savedBaselineHtml) this.savedBaselineHtml = snap.html;
+		}
+		return snap;
+	}
+
+	/** 相对共享原始基线是否脏（标题或正文任一不同） */
+	isDirtyAgainstOrigin(
+		noteId: string | null | undefined,
+		html: string,
+		title?: string,
+	): boolean {
+		const origin = this.getNoteOrigin(noteId);
+		if (!origin) return false;
+		if (html !== origin.html) return true;
+		if (title !== undefined && title.trim() !== origin.title.trim())
+			return true;
+		return false;
+	}
+
+	clearNoteOrigin(noteId: string | null | undefined): void {
+		if (!noteId) return;
+		removeNoteOriginSession(noteId);
+		if (this.noteOrigin?.noteId === noteId) this.noteOrigin = null;
+		if (this.heldOriginNoteId === noteId) this.heldOriginNoteId = null;
+	}
+
+	private originWindowId(): string {
+		return this.localWindowId ?? getLocalNoteOriginWindowId();
+	}
+
+	private sessionNoteId(): string | null {
+		return this.editingId ?? this.preview?.id ?? this.boundNoteId;
+	}
+
+	private acquireOriginSession(noteId: string | null | undefined): void {
+		const windowId = this.originWindowId();
+		if (!noteId) return;
+		if (this.heldOriginNoteId === noteId) return;
+		if (this.heldOriginNoteId && this.heldOriginNoteId !== noteId) {
+			this.releaseOriginSession(this.heldOriginNoteId);
+		}
+		acquireNoteOriginSession(noteId, windowId);
+		this.heldOriginNoteId = noteId;
+	}
+
+	/**
+	 * 本窗离开该篇；仅当所有窗都 release 后才清 localStorage 基线。
+	 * 本窗内存 noteOrigin 总是清掉，避免切走后仍误用。
+	 */
+	private releaseOriginSession(noteId: string | null | undefined): void {
+		if (!noteId) return;
+		const windowId = this.originWindowId();
+		const lastHolder = releaseNoteOriginSession(noteId, windowId);
+		if (this.heldOriginNoteId === noteId) this.heldOriginNoteId = null;
+		if (this.noteOrigin?.noteId === noteId) this.noteOrigin = null;
+		if (lastHolder) removeNoteOriginSession(noteId);
+	}
+
+	private releaseOriginSessionIfLeaving(
+		prevId: string | null | undefined,
+		nextId: string | null | undefined,
+	): void {
+		if (!prevId || prevId === nextId) return;
+		this.releaseOriginSession(prevId);
+	}
+
+	/** 刷新/关页：释放 holder，避免泄漏导致基线永不清 */
+	releaseHeldOriginSession(): void {
+		const id = this.heldOriginNoteId ?? this.sessionNoteId();
+		if (id) this.releaseOriginSession(id);
+	}
+
 	registerEditorSnapshot(fn: (() => NoteEditorSnapshot | null) | null): void {
 		this.editorSnapshotReader = fn;
 	}
 
-	/** 关窗 / 跨窗 snapshot：优先读编辑器；已卸载则回落到离页缓存 */
+	/** 关窗 / 跨窗 / 离页 snapshot：优先读编辑器；已卸载则回落到离页缓存 */
 	takeEditorSnapshot(): NoteEditorSnapshot | null {
 		const live = this.editorSnapshotReader?.() ?? null;
 		if (live) return live;
 		const stashed = this.leaveSnap;
 		if (!stashed) return null;
 		const target = this.editingId ?? this.boundNoteId;
-		// 切篇空隙：缓存仍是上一篇时不得用于当前 id
-		if (stashed.noteId !== target) return null;
+		// 切篇空隙：有明确 target 且缓存是另一篇时丢弃；target 已空（卸载途中）仍用缓存
+		if (target && stashed.noteId && stashed.noteId !== target) return null;
 		return stashed;
 	}
 
@@ -206,6 +342,7 @@ class LearningNotesStore {
 	 * 重进不再挂着旧 editingId + editorInitial，避免用过期正文顶掉服务端最新稿。
 	 */
 	resetEditorSession(): void {
+		this.releaseHeldOriginSession();
 		this.preview = null;
 		this.editingId = null;
 		this.boundNoteId = null;
@@ -222,9 +359,46 @@ class LearningNotesStore {
 		void this.discardUploadSession();
 	}
 
-	/** 离页：先保存脏稿，再清选中（顺序不能反，否则 saveTargetId 丢失会误新建） */
+	/**
+	 * 离页：先保存脏稿，再清选中（顺序不能反，否则 saveTargetId 丢失会误新建）。
+	 * SPA 切路由时 Host 仍在，必须走 Host http；keepalive 仅作刷新/关页兜底，
+	 * 且插件 env 常无 API domain，keepalive 可能空操作。
+	 */
 	async leavePage(): Promise<void> {
-		await this.flushLeaveSnap();
+		// 子树/reader 可能已卸：take 失败时直接用 leaveSnap（须在 reset 前）
+		const snap =
+			this.takeEditorSnapshot() ??
+			(this.leaveSnap?.dirty ? this.leaveSnap : null);
+		if (
+			snap?.dirty &&
+			!this.preview &&
+			(hasNoteBodyContent(snap.html, snap.text) || snap.title.trim())
+		) {
+			const ok = await this.saveNote(
+				{
+					title: snap.title,
+					html: snap.html,
+					text: snap.text,
+					dirty: true,
+				},
+				{ silent: true, auto: true },
+			);
+			// Host http 失败时再 keepalive 兜底（刷新/关页同路径）
+			if (!ok) {
+				const noteId = this.saveTargetId;
+				const title = snap.title.trim() || this.t('common.untitledNote');
+				saveNoteKeepalive({
+					id: noteId,
+					title,
+					html: snap.html,
+					uploadSessionId: this.uploadSessionId,
+				});
+				this.notifyPeerSavedAfterKeepalive(noteId, snap.html, title);
+			}
+		} else if (!this.preview) {
+			// 无脏稿：结算/丢弃上传会话
+			this.flushNoteOnPageHide();
+		}
 		this.resetEditorSession();
 	}
 
@@ -293,19 +467,46 @@ class LearningNotesStore {
 		});
 	}
 
-	/** 刷新/关页：keepalive 保存或结算 pending（不用 visibilitychange） */
+	/** keepalive 保存后通知对端清脏（刷新/关页不走 saveNote，须显式广播 saved） */
+	private notifyPeerSavedAfterKeepalive(
+		noteId: string | null,
+		html: string,
+		title: string,
+	): void {
+		if (!noteId) return;
+		const savedTitle = title.trim() || this.t('common.untitledNote');
+		this.captureNoteOrigin(noteId, html, savedTitle);
+		this.syncPublish?.saved?.({
+			noteId,
+			html,
+			title: savedTitle,
+		});
+		this.syncPublish?.listChanged?.('pagehide-save');
+	}
+
+	/** 刷新/关页/SPA 离页：keepalive 保存或结算 pending（不用 visibilitychange） */
 	flushNoteOnPageHide(): void {
 		if (this.preview) return;
 		const snap = this.takeEditorSnapshot();
 		const sid = this.uploadSessionId;
 		const owned = this.uploadSessionOwned;
-		if (snap?.dirty && hasNoteBodyContent(snap.html, snap.text)) {
+		if (
+			snap?.dirty &&
+			(hasNoteBodyContent(snap.html, snap.text) || snap.title.trim())
+		) {
+			const noteId = this.saveTargetId;
+			const title = snap.title.trim() || this.t('common.untitledNote');
 			saveNoteKeepalive({
-				id: this.saveTargetId,
-				title: snap.title.trim() || this.t('common.untitledNote'),
+				id: noteId,
+				title,
 				html: snap.html,
 				uploadSessionId: sid,
 			});
+			this.notifyPeerSavedAfterKeepalive(noteId, snap.html, title);
+			// 避免 leavePage / pagehide 重复 keepalive
+			if (this.leaveSnap?.noteId === (this.editingId ?? this.boundNoteId)) {
+				this.leaveSnap = { ...this.leaveSnap, dirty: false };
+			}
 			this.uploadSessionId = null;
 			this.uploadSessionOwned = true;
 			return;
@@ -462,6 +663,23 @@ class LearningNotesStore {
 		if (this.preview?.id === noteId) {
 			const baseline =
 				this.savedBaselineHtml ?? this.pendingPeerDraft?.baselineHtml;
+			// openPreview 合并本窗编辑稿期间：只记 pending，勿用对端旧快照盖预览正文
+			if (this.loadingDetail) {
+				if (draft.dirty === false) {
+					this.pendingPeerDraft = null;
+					if (draft.html.trim()) this.savedBaselineHtml = draft.html;
+				} else {
+					this.pendingPeerDraft = {
+						noteId,
+						html: draft.html,
+						title: draft.title,
+						uploadSessionId: draft.uploadSessionId,
+						dirty: draft.dirty ?? true,
+						baselineHtml: baseline,
+					};
+				}
+				return;
+			}
 			if (draft.dirty === false) {
 				this.pendingPeerDraft = null;
 				if (draft.html.trim()) this.savedBaselineHtml = draft.html;
@@ -504,6 +722,7 @@ class LearningNotesStore {
 		}
 		if (payload.html.trim()) {
 			this.savedBaselineHtml = payload.html;
+			this.captureNoteOrigin(noteId, payload.html, payload.title || '');
 		}
 		if (this.preview?.id === noteId) {
 			this.preview = {
@@ -548,7 +767,9 @@ class LearningNotesStore {
 	}
 
 	async openNew() {
+		const prevId = this.sessionNoteId();
 		await this.leaveEditor();
+		this.releaseOriginSessionIfLeaving(prevId, null);
 		this.preview = null;
 		this.editingId = null;
 		this.bindNoteId(null);
@@ -562,17 +783,29 @@ class LearningNotesStore {
 
 	async openPreview(id: string): Promise<void> {
 		if (!this.api) return;
+		// 已在预览同篇：勿再 detail，避免把当前预览（含未保存稿）盖成服务端旧稿
+		if (this.preview?.id === id && !this.loadingDetail) return;
+
+		const prevId = this.sessionNoteId();
+		const editingSame = this.editingId === id && !this.preview;
+		// 同篇编辑中：优先编辑器快照，其次离页缓存（reader 偶发失败时不丢稿）
+		const localFromEdit = editingSame
+			? (this.takeEditorSnapshot() ??
+				(this.leaveSnap?.noteId === id ? this.leaveSnap : null))
+			: null;
+		// 读不到本地稿就别卸编辑器 + 拉 detail，否则未保存正文会直接丢
+		if (editingSame && !localFromEdit) return;
+
 		await this.leaveEditor();
+		this.releaseOriginSessionIfLeaving(prevId, id);
 		const listHit = this.list.find((n) => n.id === id);
 		// 立刻进入预览壳：卸掉编辑器，避免与即将挂载的预览双实例并存
 		runInAction(() => {
 			this.bindNoteId(id);
-			// 预览其他篇时清空 editingId，并卸掉旧正文，避免无 id 编辑器残留后误走新建
-			if (this.editingId !== id) {
-				this.editingId = null;
-				this.editorInitial = EMPTY_NOTE_DOC;
-				this.editorSeed += 1;
-			}
+			// 进预览一律卸编辑态，避免 editingId 与 preview 同时挂着同篇
+			this.editingId = null;
+			this.editorInitial = EMPTY_NOTE_DOC;
+			this.editorSeed += 1;
 			this.loadingDetail = true;
 			this.savedBaselineHtml = null;
 			if (this.pendingPeerDraft?.noteId !== id) {
@@ -580,8 +813,14 @@ class LearningNotesStore {
 			}
 			this.preview = {
 				id,
-				title: listHit?.title ?? this.preview?.title ?? '',
-				html: this.preview?.id === id ? this.preview.html : '',
+				title:
+					localFromEdit?.title.trim() ||
+					listHit?.title ||
+					this.preview?.title ||
+					'',
+				html:
+					localFromEdit?.html ||
+					(this.preview?.id === id ? this.preview.html : ''),
 				at: listHit?.at ?? this.preview?.at ?? Date.now(),
 				author:
 					listHit?.author ??
@@ -602,26 +841,58 @@ class LearningNotesStore {
 					this.pendingPeerDraft?.noteId === id ? this.pendingPeerDraft : null;
 				const serverHtml = note.html || '';
 				this.savedBaselineHtml = serverHtml;
+				// 共享基线只由编辑器 ready / 保存 / 清脏写入（TipTap 规范化稿），
+				// 这里不拿服务端原始串抢占，避免主子窗脏判断起点不一致
+				this.getNoteOrigin(id);
 				this.bindNoteId(id);
-				// 对端未保存草稿优先于服务端旧正文
-				this.preview = peer
-					? {
-							...note,
-							html: peer.html,
-							title: peer.title.trim() || note.title,
-						}
-					: note;
-				if (peer && peer.dirty !== false) {
-					this.pendingPeerDraft = {
-						...peer,
-						baselineHtml: serverHtml,
+				// 优先级：本窗刚离开的编辑快照 > 对端 pending > 服务端
+				// （对端旧快照不能盖掉本窗未保存正文——这正是「点同篇预览/列表看到旧稿」的根因之一）
+				if (localFromEdit) {
+					const title = localFromEdit.title.trim() || note.title;
+					this.preview = {
+						...note,
+						html: localFromEdit.html,
+						title,
 					};
-				} else {
-					this.pendingPeerDraft = null;
+					// leaveEditor 若已静默保存成功，leaveSnap.dirty===false，不必再挂 pending
+					const stillDirty =
+						this.leaveSnap?.noteId === id
+							? this.leaveSnap.dirty
+							: localFromEdit.dirty;
+					if (stillDirty) {
+						this.pendingPeerDraft = {
+							noteId: id,
+							html: localFromEdit.html,
+							title: localFromEdit.title,
+							dirty: true,
+							baselineHtml: serverHtml,
+						};
+					} else {
+						this.pendingPeerDraft = null;
+					}
+					return;
 				}
+				if (peer) {
+					this.preview = {
+						...note,
+						html: peer.html,
+						title: peer.title.trim() || note.title,
+					};
+					if (peer.dirty !== false) {
+						this.pendingPeerDraft = {
+							...peer,
+							baselineHtml: serverHtml,
+						};
+					} else {
+						this.pendingPeerDraft = null;
+					}
+					return;
+				}
+				this.preview = note;
+				this.pendingPeerDraft = null;
 			});
 		} catch {
-			// Host http 已 Toast（如「笔记不存在」）
+			// Host http 已 Toast（如「笔记不存在」）；同篇编辑快照已写入壳则保留
 			runInAction(() => {
 				if (this.preview?.id === id && !this.preview.html) {
 					this.preview = null;
@@ -630,12 +901,17 @@ class LearningNotesStore {
 		} finally {
 			runInAction(() => {
 				this.loadingDetail = false;
+				if (this.preview?.id === id) this.acquireOriginSession(id);
 			});
 		}
 	}
 
 	async openEdit(note: Note) {
+		// 已在编辑同篇：勿 remount 盖掉未保存稿
+		if (this.editingId === note.id && !this.preview) return;
+		const prevId = this.sessionNoteId();
 		await this.leaveEditor();
+		this.releaseOriginSessionIfLeaving(prevId, note.id);
 		this.preview = null;
 		this.editingId = note.id;
 		this.bindNoteId(note.id);
@@ -648,11 +924,17 @@ class LearningNotesStore {
 			(typeof note.html === 'string' && note.html) ||
 			peer?.html ||
 			EMPTY_NOTE_DOC;
-		const baselineHtml =
-			peer?.baselineHtml ||
-			this.savedBaselineHtml ||
-			(typeof note.html === 'string' ? note.html : '');
+		const serverHtml = typeof note.html === 'string' ? note.html : '';
+		const sharedOrigin = this.getNoteOrigin(note.id);
+		// 无对端草稿时以服务端稿为「是否未保存」判据，勿用 LS 陈旧 origin 误挂脏稿
+		const baselineHtml = peer
+			? (peer.baselineHtml ??
+				sharedOrigin?.html ??
+				this.savedBaselineHtml ??
+				serverHtml)
+			: serverHtml || sharedOrigin?.html || this.savedBaselineHtml || '';
 		this.savedBaselineHtml = null;
+		if (sharedOrigin && peer) this.noteOrigin = sharedOrigin;
 
 		const draftStr = typeof draftHtml === 'string' ? draftHtml : '';
 		const hasUnsaved =
@@ -675,10 +957,18 @@ class LearningNotesStore {
 				if (this.editingId === note.id) this.applyRemoteDraft(note.id, draft);
 			});
 		}
+		this.acquireOriginSession(note.id);
 	}
 
 	async openEditById(id: string): Promise<void> {
 		if (!this.api) return;
+		// 已在编辑同篇：勿 detail 重挂
+		if (this.editingId === id && !this.preview) return;
+		// 预览同篇已有正文（可能含未保存稿）：直接进编辑，避免 detail 旧稿覆盖
+		if (this.preview?.id === id && this.preview.html) {
+			await this.openEdit(this.preview);
+			return;
+		}
 		try {
 			const note = await this.api.detail(id);
 			await this.openEdit(note);
@@ -767,6 +1057,7 @@ class LearningNotesStore {
 					text: this.leaveSnap?.text ?? '',
 					dirty: false,
 				};
+				this.captureNoteOrigin(savedId, savedHtml, savedTitle);
 				sync?.saved?.({
 					noteId: savedId,
 					html: savedHtml,
@@ -964,6 +1255,7 @@ class LearningNotesStore {
 				}
 				if (this.boundNoteId === id) this.boundNoteId = null;
 				this.pendingDeleteId = null;
+				this.clearNoteOrigin(id);
 			});
 			this.syncPublish?.deleted?.(id);
 			this.syncPublish?.listChanged?.('delete');

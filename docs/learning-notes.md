@@ -5,6 +5,7 @@
 > - 切笔记/离页三层自动保存与 keepalive 兜底见 [笔记自动保存与离页保存](./learning-notes/笔记自动保存与离页保存.md)。
 > - Host 多窗口同一笔记草稿同步、脏标记仲裁、上传会话 adopt/rotate（初始版 connectStore 绑定模式）见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md)。
 > - subscribe 分发重构、Store 自发广播 saved/deleted、leaveSnap 离页快照、编辑器 epoch 守卫见 [跨窗同步重构与离页快照](./learning-notes/跨窗同步重构与离页快照.md)。
+> - localStorage 共享原始基线（noteOrigin）+ holders 引用计数、openPreview/openEdit 防覆盖（localFromEdit > peer > server）、leavePage keepalive 兜底、独立窗口按钮见 [共享原始基线与防覆盖](./learning-notes/共享原始基线与防覆盖.md)。
 
 ## 1. 概述
 
@@ -16,7 +17,7 @@
 - **三种视图模式**：笔记列表、编辑视图、预览视图
 - **长文分页保存**：`LargeNoteEditor` 实现滚动窗口式长文编辑，避免大数据量 DOM 渲染卡顿
 - **图片上传会话**：编辑器粘贴 / 拖放 / 选图走 `uploadSessionId` 生命周期，保存时认领、切笔记 / 关页时回收，避免 COS 孤儿图（详见 [笔记图片上传会话](./learning-notes/笔记图片上传会话.md)）
-- **Host 多窗口草稿同步**：主站可弹出多窗口（主窗 + Popout）同时编辑同一笔记；草稿通过 `api.modules.learningNotes` Host sync bus debounce 广播，脏标记经 TipTap 规范化 + 远端锁三段仲裁不闪灭；上传会话跨窗 `adopt/rotate`，`owned` 状态防止 B 窗离开误删 A 窗 pending；`pendingPeerDraft + savedBaselineHtml` 保护预览态对端草稿不被 detail 接口覆盖；重构后 Hook 迁至 `src/hooks/useNoteHostSync.ts`，subscribe 分发替代 connectStore 绑定，Store 通过 `bindSyncPublish` 自发广播 saved/deleted/listChanged，`leaveSnap` 缓存 + `leavePage` 保证 SPA 路由离开不丢稿，编辑器 epoch 守卫防止切篇空隙脏读（详见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md) 与 [跨窗同步重构与离页快照](./learning-notes/跨窗同步重构与离页快照.md)）
+- **Host 多窗口草稿同步**：主站可弹出多窗口（主窗 + Popout）同时编辑同一笔记；草稿通过 `api.modules.learningNotes` Host sync bus debounce 广播，脏标记经 TipTap 规范化 + 远端锁三段仲裁不闪灭；上传会话跨窗 `adopt/rotate`，`owned` 状态防止 B 窗离开误删 A 窗 pending；`pendingPeerDraft + savedBaselineHtml` 保护预览态对端草稿不被 detail 接口覆盖；重构后 Hook 迁至 `src/hooks/useNoteHostSync.ts`，subscribe 分发替代 connectStore 绑定，Store 通过 `bindSyncPublish` 自发广播 saved/deleted/listChanged，`leaveSnap` 缓存 + `leavePage` 保证 SPA 路由离开不丢稿，编辑器 epoch 守卫防止切篇空隙脏读（详见 [跨窗草稿同步与脏标记仲裁](./learning-notes/跨窗草稿同步与脏标记仲裁.md) 与 [跨窗同步重构与离页快照](./learning-notes/跨窗同步重构与离页快照.md)）；进一步通过 localStorage 共享原始基线（`noteOrigin`）+ holders 引用计数，消除各窗 TipTap 基线漂移导致的脏标记不一致；`openPreview/openEdit` 防覆盖采用 localFromEdit > peer > server 三级合并；`leavePage` Host http 失败时回退 `saveNoteKeepalive` 兜底；工具栏新增 `AppWindow` 按钮调用 Host `openPopoutWindow` 弹出独立窗口（详见 [共享原始基线与防覆盖](./learning-notes/共享原始基线与防覆盖.md)）
 - **DOCX 导出**：服务端生成 Word 文档，通过 Host `downloadBlob` API 落盘
 - **分屏布局**：`ResizablePanel` 可拖拽调整列表/编辑器宽度
 - **HostBridge 通信**：通过 `api.http` / `api.ui` / `api.event` / `api.modules` 与主站宿主通信
@@ -60,7 +61,8 @@ graph TB
         subgraph Utils["工具层"]
             DocUtils["utils/doc.ts<br/>长文分页算法"]
             PreviewHtml["previewHtml.ts<br/>HTML 预处理"]
-            HostSyncHook["useNoteHostSync<br/>subscribe 分发 + publishDraft debounce + leavePage"]
+            HostSyncHook["useNoteHostSync<br/>subscribe 分发 + publishDraft debounce + leavePage + bindLocalWindowId"]
+            NoteOrigin["noteOrigin.ts<br/>localStorage 共享原始基线 + holders 引用计数"]
         end
 
         subgraph Design["设计系统"]
@@ -156,7 +158,7 @@ sequenceDiagram
     Host-->>App: state-snapshot<br/>(endAwaitRemoteSnapshot)
     Peer-->>Host: 如有未保存则 publishDraft
     App->>Store: openPreview(id)
-    Store->>Store: bindNoteId(id)<br/>rotateUploadSession<br/>loadingDetail=true<br/>preview = 壳子(标题占位)
+    Store->>Store: acquireNoteOriginSession(id, windowId)<br/>ensureNoteOrigin 抢占共享基线<br/>bindNoteId(id)<br/>rotateUploadSession<br/>loadingDetail=true<br/>preview = 壳子(标题占位)
     alt 对端草稿先于 detail 到达
       Host-->>App: applyRemoteDraft(noteId, draft)
       App->>Store: applyRemoteDraft
@@ -166,11 +168,13 @@ sequenceDiagram
     Api->>Host: GET /english-learning/notes/detail/{id}
     Host-->>Api: { data: { id, title, content, ... } }
     Api-->>Store: toNote(note)
-    Store->>Store: savedBaselineHtml = serverHtml
-    alt pendingPeerDraft 存在(草稿优先)
+    Store->>Store: savedBaselineHtml = serverHtml<br/>captureNoteOrigin 更新共享基线
+    alt localFromEdit 快照存在(编辑态切预览，本地优先)
+      Store->>Store: preview = { ...note, html:localFromEdit.html }
+    else pendingPeerDraft 存在(对端草稿优先于服务端)
       Store->>Store: preview = { ...note, html:pendingPeerDraft.html, title:pendingPeerDraft.title }
       Store->>Store: pendingPeerDraft.baselineHtml = serverHtml（保留供预览→编辑）
-    else 无草稿
+    else 无草稿(服务端正文)
       Store->>Store: preview = note
     end
     Store->>Store: loadingDetail = false
@@ -220,6 +224,7 @@ import {
 	richEditorLocaleOf,                           // 根据语言获取编辑器 locale
 } from "@design/RichEditor";
 import {
+	AppWindow,                                   // 应用窗口图标（独立打开）
 	Eye,                                         // 眼睛图标（预览）
 	FileDown,                                    // 文件下载图标（导出）
 	FilePenLine,                                 // 新文件图标（新建）
@@ -337,6 +342,8 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	// 同步脏状态（比较当前 HTML 与基线 HTML）
 	// ⚠ 新增 dirtyRef + dirty→clean 时 settleUploadSessionIfNeeded：见
 	//   docs/learning-notes/笔记图片上传会话.md §4.16
+	// ⚠ 基线现已由 localStorage 共享原始基线（noteOrigin）统一维护，消除各窗 TipTap 漂移：
+	//   详见 docs/learning-notes/共享原始基线与防覆盖.md
 	const syncDirty = useCallback(() => {
 		const html = currentHtml();
 		const nextDirty = html !== baselineHtmlRef.current;
@@ -450,6 +457,23 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 		[store, store.listOpen, t],
 	);
 
+	// ==================== 独立窗口按钮（popout） ====================
+	// 主窗显示 AppWindow 图标按钮，点击调用 Host openPopoutWindow 弹出独立窗口；
+	// Popout 窗口内本按钮不渲染（isPopoutWindow 判定）。
+	// 详见 docs/learning-notes/共享原始基线与防覆盖.md
+	const popoutBtn = useCallback((): React.ReactElement | null => {
+		const mod = api.modules?.learningNotes;
+		if (!mod?.openPopoutWindow || mod.isPopoutWindow()) return null;
+		return (
+			<Btn
+				title={t("learningNotes.popout")}  // "独立打开" / "Open in window"
+				onClick={() => void mod.openPopoutWindow?.()}
+			>
+				<AppWindow size={15} />
+			</Btn>
+		);
+	}, [api.modules?.learningNotes, t]);
+
 	// ==================== 编辑器工具栏扩展按钮 ====================
 	const toolbarExtra = useMemo(
 		() => (
@@ -543,11 +567,14 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 						</Btn>
 					</>
 				) : null}
-				{listToggleBtn()}
-			</>
-		),
+			{listToggleBtn()}
+			{/* 独立窗口按钮：主窗显示，Popout 窗口内不显示 */}
+			{popoutBtn()}
+		</>
+	),
 		[
 			listToggleBtn,
+			popoutBtn,
 			previewOwned,
 			store,
 			store.exportingDocx,
@@ -963,6 +990,8 @@ class LearningNotesStore {
 	}
 
 	// 打开笔记预览
+	// ⚠ 防覆盖：同篇短路 + localFromEdit 快照优先于服务端正文 + detail 回包三级合并：
+	//   详见 docs/learning-notes/共享原始基线与防覆盖.md
 	async openPreview(id: string): Promise<void> {
 		if (!this.api) return;
 		// 从列表中查找已有数据
@@ -1007,6 +1036,8 @@ class LearningNotesStore {
 	}
 
 	// 从预览态进入编辑态
+	// ⚠ 防覆盖：预览态已有正文时直接进编辑，不再拉 detail 覆盖；优先 localFromEdit 快照：
+	//   详见 docs/learning-notes/共享原始基线与防覆盖.md
 	openEdit(note: Note) {
 		this.preview = null;                  // 退出预览
 		this.editingId = note.id;             // 设置编辑 ID
@@ -2674,11 +2705,12 @@ LearningNotesApp                     Host (主站)
 
 **状态转换**：
 1. **新建**：`openNew()` 清除 `preview`/`editingId`，重置 `editorInitial`，`editorSeed++` 触发编辑器重建
-2. **编辑**：`openEdit(note)` 设置 `editingId`，加载 `note.html` 到编辑器
-3. **保存**：`saveNote()` → 校验 → `api.save`/`api.update` → `refreshList()`
-4. **预览**：`openPreview(id)` 设置 `preview`，加载详情 HTML
+2. **编辑**：`openEdit(note)` 设置 `editingId`，加载 `note.html` 到编辑器（预览态已有正文时直接进编辑，不再拉 detail 覆盖）
+3. **保存**：`saveNote()` → 校验 → `api.save`/`api.update` → `refreshList()` → `captureNoteOrigin` 更新共享基线
+4. **预览**：`openPreview(id)` 设置 `preview`，加载详情 HTML（防覆盖：localFromEdit > peer > server 三级合并）
 5. **导出**：`exportPreviewDocx()` → `api.exportDocx()` → `downloadBlob()`
-6. **删除**：`requestDelete()` → 确认弹窗 → `confirmDelete()` → `api.remove()`
+6. **删除**：`requestDelete()` → 确认弹窗 → `confirmDelete()` → `api.remove()` → `clearNoteOrigin` 清基线 + holders
+7. **离页**：`leavePage()` → Host http 保存失败时回退 `saveNoteKeepalive` 兜底 + 广播 saved；`pagehide` 释放 holder
 
 ### 4.4 长文分页策略
 
@@ -2723,11 +2755,12 @@ LearningNotesApp                     Host (主站)
 ```
 用户输入 → editor.onChange → syncDirty()
                                 │
-                                └─ currentHtml() !== baselineHtmlRef.current
-                                    （比较当前 HTML 与初始基线）
+                                └─ currentHtml() !== noteOrigin.html（共享基线）
+                                    （baselineHtmlRef 同步自 localStorage noteOrigin，
+                                     消除各窗 TipTap 漂移导致的脏标记不一致）
                                 │
                                 └─ setDirty(true)
-                                
+
 保存时：
   onSave() → store.saveNote({ dirty, ... })
                 │
@@ -2735,6 +2768,7 @@ LearningNotesApp                     Host (主站)
                 ├─ title 空 → Toast "请输入标题" → return
                 ├─ 正文空 → Toast "请输入内容" → return
                 └─ api.save/update → Toast "保存成功" → markClean()
+                                       └─ captureNoteOrigin 更新共享基线
 ```
 
 **Cmd+S / Ctrl+S 快捷键**：

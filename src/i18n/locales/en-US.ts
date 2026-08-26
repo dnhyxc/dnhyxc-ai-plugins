@@ -58,6 +58,7 @@ const enUS: Record<string, string> = {
 	'learningNotes.placeholder':
 		'Capture words, grammar, or speaking notes for today…',
 	'learningNotes.new': 'New note',
+	'learningNotes.popout': 'Open in window',
 	'learningNotes.edit': 'Edit',
 	'learningNotes.makePublic': 'Make public',
 	'learningNotes.makePrivate': 'Make private',

@@ -5,18 +5,19 @@ import { cn } from '@/lib/utils';
 
 type ScrollAreaScrollbars = 'vertical' | 'horizontal' | 'both';
 
-interface ScrollAreaProps
-	extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
-	viewportClassName?: string;
-	scrollbarClassName?: string;
-	dataTauriDragRegion?: boolean;
-	onScroll?: React.UIEventHandler<HTMLDivElement>;
-	onWheel?: React.WheelEventHandler<HTMLDivElement>;
-	onWheelCapture?: React.WheelEventHandler<HTMLDivElement>;
-	onPointerDownCapture?: React.PointerEventHandler<HTMLDivElement>;
-	/** Radix 须挂载对应 Scrollbar 才开启该方向滚动；Markdown 预览等需 both 以免撑破 flex 父级 */
-	scrollbars?: ScrollAreaScrollbars;
-}
+export type ScrollAreaProps = React.PropsWithChildren<
+	Omit<React.ComponentProps<typeof ScrollAreaPrimitive.Root>, 'children'> & {
+		viewportClassName?: string;
+		scrollbarClassName?: string;
+		dataTauriDragRegion?: boolean;
+		onScroll?: React.UIEventHandler<HTMLDivElement>;
+		onWheel?: React.WheelEventHandler<HTMLDivElement>;
+		onWheelCapture?: React.WheelEventHandler<HTMLDivElement>;
+		onPointerDownCapture?: React.PointerEventHandler<HTMLDivElement>;
+		/** Radix 须挂载对应 Scrollbar 才开启该方向滚动；Markdown 预览等需 both 以免撑破 flex 父级 */
+		scrollbars?: ScrollAreaScrollbars;
+	}
+>;
 
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
 	(
@@ -72,7 +73,9 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
 			</ScrollAreaPrimitive.Root>
 		);
 	},
-);
+) as React.ForwardRefExoticComponent<
+	ScrollAreaProps & React.RefAttributes<HTMLDivElement>
+>;
 
 ScrollArea.displayName = 'ScrollArea';
 

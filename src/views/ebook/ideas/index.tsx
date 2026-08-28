@@ -264,12 +264,12 @@ function IdeasListApp({ api }: HostBridgeProps) {
 	);
 }
 
-IdeasListApp.activate = async (api: HostBridgeProps['api']) => {
-	console.log('[ebook-ideas] activate', api);
-};
+// IdeasListApp.activate = async (api: HostBridgeProps['api']) => {
+// 	console.log('[ebook-ideas] activate', api);
+// };
 
-IdeasListApp.deactivate = () => {
-	console.log('[ebook-ideas] deactivate');
-};
+// IdeasListApp.deactivate = () => {
+// 	console.log('[ebook-ideas] deactivate');
+// };
 
 export default IdeasListApp;

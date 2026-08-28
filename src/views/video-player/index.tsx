@@ -161,12 +161,12 @@ const VideoPlayerApp = ({ api }: HostBridgeProps) => {
 	);
 };
 
-VideoPlayerApp.activate = async (api: HostBridgeProps['api']) => {
-	console.log('[video-player] activate', api);
-};
+// VideoPlayerApp.activate = async (api: HostBridgeProps['api']) => {
+// 	console.log('[video-player] activate', api);
+// };
 
-VideoPlayerApp.deactivate = (api: HostBridgeProps['api']) => {
-	console.log('[video-player] deactivate', api);
-};
+// VideoPlayerApp.deactivate = (api: HostBridgeProps['api']) => {
+// 	console.log('[video-player] deactivate', api);
+// };
 
 export default VideoPlayerApp;

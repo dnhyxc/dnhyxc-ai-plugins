@@ -986,9 +986,9 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	);
 }
 
-LearningNotesApp.activate = async (api: HostBridgeProps['api']) => {
-	console.log('[learning-notes] activate', api);
-};
+// LearningNotesApp.activate = async (api: HostBridgeProps['api']) => {
+// 	console.log('[learning-notes] activate', api);
+// };
 
 LearningNotesApp.deactivate = () => {
 	void learningNotesStore.leavePage().finally(() => {

@@ -147,6 +147,13 @@ class LearningNotesStore {
 		makeAutoObservable(this, {}, { autoBind: true });
 	}
 
+	/** async 续体 / sync 总线回调里安全递增 editorSeed */
+	private bumpEditorSeed(): void {
+		runInAction(() => {
+			this.editorSeed += 1;
+		});
+	}
+
 	bind(
 		http: HostHttp | undefined,
 		toast: ToastFn,
@@ -342,20 +349,22 @@ class LearningNotesStore {
 	 * 重进不再挂着旧 editingId + editorInitial，避免用过期正文顶掉服务端最新稿。
 	 */
 	resetEditorSession(): void {
-		this.releaseHeldOriginSession();
-		this.preview = null;
-		this.editingId = null;
-		this.boundNoteId = null;
-		this.pendingPeerDraft = null;
-		this.savedBaselineHtml = null;
-		this.leaveSnap = null;
-		this.loadingDetail = false;
-		this.confirmOpen = false;
-		this.pendingDeleteId = null;
-		this.visibilityConfirmOpen = false;
-		this.pendingVisibility = null;
-		this.editorInitial = EMPTY_NOTE_DOC;
-		this.editorSeed += 1;
+		runInAction(() => {
+			this.releaseHeldOriginSession();
+			this.preview = null;
+			this.editingId = null;
+			this.boundNoteId = null;
+			this.pendingPeerDraft = null;
+			this.savedBaselineHtml = null;
+			this.leaveSnap = null;
+			this.loadingDetail = false;
+			this.confirmOpen = false;
+			this.pendingDeleteId = null;
+			this.visibilityConfirmOpen = false;
+			this.pendingVisibility = null;
+			this.editorInitial = EMPTY_NOTE_DOC;
+			this.bumpEditorSeed();
+		});
 		void this.discardUploadSession();
 	}
 
@@ -660,15 +669,32 @@ class LearningNotesStore {
 			dirty?: boolean;
 		},
 	) {
-		if (this.preview?.id === noteId) {
-			const baseline =
-				this.savedBaselineHtml ?? this.pendingPeerDraft?.baselineHtml;
-			// openPreview 合并本窗编辑稿期间：只记 pending，勿用对端旧快照盖预览正文
-			if (this.loadingDetail) {
+		runInAction(() => {
+			if (this.preview?.id === noteId) {
+				const baseline =
+					this.savedBaselineHtml ?? this.pendingPeerDraft?.baselineHtml;
+				// openPreview 合并本窗编辑稿期间：只记 pending，勿用对端旧快照盖预览正文
+				if (this.loadingDetail) {
+					if (draft.dirty === false) {
+						this.pendingPeerDraft = null;
+						if (draft.html.trim()) this.savedBaselineHtml = draft.html;
+					} else {
+						this.pendingPeerDraft = {
+							noteId,
+							html: draft.html,
+							title: draft.title,
+							uploadSessionId: draft.uploadSessionId,
+							dirty: draft.dirty ?? true,
+							baselineHtml: baseline,
+						};
+					}
+					return;
+				}
 				if (draft.dirty === false) {
 					this.pendingPeerDraft = null;
 					if (draft.html.trim()) this.savedBaselineHtml = draft.html;
 				} else {
+					// 预览期间保留 pending，供预览→编辑恢复「服务端基线 + 未保存草稿」
 					this.pendingPeerDraft = {
 						noteId,
 						html: draft.html,
@@ -678,42 +704,31 @@ class LearningNotesStore {
 						baselineHtml: baseline,
 					};
 				}
-				return;
-			}
-			if (draft.dirty === false) {
-				this.pendingPeerDraft = null;
-				if (draft.html.trim()) this.savedBaselineHtml = draft.html;
-			} else {
-				// 预览期间保留 pending，供预览→编辑恢复「服务端基线 + 未保存草稿」
-				this.pendingPeerDraft = {
-					noteId,
+				this.preview = {
+					...this.preview,
 					html: draft.html,
 					title: draft.title,
-					uploadSessionId: draft.uploadSessionId,
-					dirty: draft.dirty ?? true,
-					baselineHtml: baseline,
 				};
+				return;
 			}
-			this.preview = { ...this.preview, html: draft.html, title: draft.title };
-			return;
-		}
-		if (this.editingId === noteId) {
-			this.pendingPeerDraft = null;
-			this.adoptUploadSessionIdForSync(draft.uploadSessionId);
-			if (this.remoteDraftApplier?.(noteId, draft)) return;
-			this.editorInitial = draft.html;
-			this.editorSeed += 1;
-			return;
-		}
-		// 对端已推快照但本窗还在 openEditById / detail 途中
-		this.pendingPeerDraft = {
-			noteId,
-			html: draft.html,
-			title: draft.title,
-			uploadSessionId: draft.uploadSessionId,
-			dirty: draft.dirty,
-			baselineHtml: this.savedBaselineHtml ?? undefined,
-		};
+			if (this.editingId === noteId) {
+				this.pendingPeerDraft = null;
+				this.adoptUploadSessionIdForSync(draft.uploadSessionId);
+				if (this.remoteDraftApplier?.(noteId, draft)) return;
+				this.editorInitial = draft.html;
+				this.bumpEditorSeed();
+				return;
+			}
+			// 对端已推快照但本窗还在 openEditById / detail 途中
+			this.pendingPeerDraft = {
+				noteId,
+				html: draft.html,
+				title: draft.title,
+				uploadSessionId: draft.uploadSessionId,
+				dirty: draft.dirty,
+				baselineHtml: this.savedBaselineHtml ?? undefined,
+			};
+		});
 	}
 
 	applyRemoteSaved(noteId: string, payload: { html: string; title: string }) {
@@ -748,7 +763,7 @@ class LearningNotesStore {
 			if (this.editingId === noteId) {
 				this.editingId = null;
 				this.editorInitial = EMPTY_NOTE_DOC;
-				this.editorSeed += 1;
+				this.bumpEditorSeed();
 			}
 			if (this.boundNoteId === noteId) this.boundNoteId = null;
 			if (this.pendingDeleteId === noteId) {
@@ -769,16 +784,18 @@ class LearningNotesStore {
 	async openNew() {
 		const prevId = this.sessionNoteId();
 		await this.leaveEditor();
-		this.releaseOriginSessionIfLeaving(prevId, null);
-		this.preview = null;
-		this.editingId = null;
-		this.bindNoteId(null);
-		this.pendingPeerDraft = null;
-		this.savedBaselineHtml = null;
-		this.leaveSnap = null;
-		this.rotateUploadSession();
-		this.editorInitial = EMPTY_NOTE_DOC;
-		this.editorSeed += 1;
+		runInAction(() => {
+			this.releaseOriginSessionIfLeaving(prevId, null);
+			this.preview = null;
+			this.editingId = null;
+			this.bindNoteId(null);
+			this.pendingPeerDraft = null;
+			this.savedBaselineHtml = null;
+			this.leaveSnap = null;
+			this.rotateUploadSession();
+			this.editorInitial = EMPTY_NOTE_DOC;
+			this.bumpEditorSeed();
+		});
 	}
 
 	async openPreview(id: string): Promise<void> {
@@ -805,7 +822,7 @@ class LearningNotesStore {
 			// 进预览一律卸编辑态，避免 editingId 与 preview 同时挂着同篇
 			this.editingId = null;
 			this.editorInitial = EMPTY_NOTE_DOC;
-			this.editorSeed += 1;
+			this.bumpEditorSeed();
 			this.loadingDetail = true;
 			this.savedBaselineHtml = null;
 			if (this.pendingPeerDraft?.noteId !== id) {
@@ -911,53 +928,57 @@ class LearningNotesStore {
 		if (this.editingId === note.id && !this.preview) return;
 		const prevId = this.sessionNoteId();
 		await this.leaveEditor();
-		this.releaseOriginSessionIfLeaving(prevId, note.id);
-		this.preview = null;
-		this.editingId = note.id;
-		this.bindNoteId(note.id);
-		this.rotateUploadSession();
-		const peer =
-			this.pendingPeerDraft?.noteId === note.id ? this.pendingPeerDraft : null;
-		this.pendingPeerDraft = null;
+		runInAction(() => {
+			this.releaseOriginSessionIfLeaving(prevId, note.id);
+			this.preview = null;
+			this.editingId = note.id;
+			this.bindNoteId(note.id);
+			this.rotateUploadSession();
+			const peer =
+				this.pendingPeerDraft?.noteId === note.id
+					? this.pendingPeerDraft
+					: null;
+			this.pendingPeerDraft = null;
 
-		const draftHtml =
-			(typeof note.html === 'string' && note.html) ||
-			peer?.html ||
-			EMPTY_NOTE_DOC;
-		const serverHtml = typeof note.html === 'string' ? note.html : '';
-		const sharedOrigin = this.getNoteOrigin(note.id);
-		// 无对端草稿时以服务端稿为「是否未保存」判据，勿用 LS 陈旧 origin 误挂脏稿
-		const baselineHtml = peer
-			? (peer.baselineHtml ??
-				sharedOrigin?.html ??
-				this.savedBaselineHtml ??
-				serverHtml)
-			: serverHtml || sharedOrigin?.html || this.savedBaselineHtml || '';
-		this.savedBaselineHtml = null;
-		if (sharedOrigin && peer) this.noteOrigin = sharedOrigin;
+			const draftHtml =
+				(typeof note.html === 'string' && note.html) ||
+				peer?.html ||
+				EMPTY_NOTE_DOC;
+			const serverHtml = typeof note.html === 'string' ? note.html : '';
+			const sharedOrigin = this.getNoteOrigin(note.id);
+			// 无对端草稿时以服务端稿为「是否未保存」判据，勿用 LS 陈旧 origin 误挂脏稿
+			const baselineHtml = peer
+				? (peer.baselineHtml ??
+					sharedOrigin?.html ??
+					this.savedBaselineHtml ??
+					serverHtml)
+				: serverHtml || sharedOrigin?.html || this.savedBaselineHtml || '';
+			this.savedBaselineHtml = null;
+			if (sharedOrigin && peer) this.noteOrigin = sharedOrigin;
 
-		const draftStr = typeof draftHtml === 'string' ? draftHtml : '';
-		const hasUnsaved =
-			Boolean(baselineHtml) &&
-			draftStr !== baselineHtml &&
-			peer?.dirty !== false;
+			const draftStr = typeof draftHtml === 'string' ? draftHtml : '';
+			const hasUnsaved =
+				Boolean(baselineHtml) &&
+				draftStr !== baselineHtml &&
+				peer?.dirty !== false;
 
-		// 有未保存草稿时先挂服务端基线，再套草稿，避免把草稿当成基线导致脏标记闪灭
-		this.editorInitial = hasUnsaved ? baselineHtml : draftHtml;
-		this.editorSeed += 1;
+			// 有未保存草稿时先挂服务端基线，再套草稿，避免把草稿当成基线导致脏标记闪灭
+			this.editorInitial = hasUnsaved ? baselineHtml : draftHtml;
+			this.bumpEditorSeed();
 
-		if (hasUnsaved) {
-			const draft = {
-				html: draftStr,
-				title: peer?.title || note.title || '',
-				uploadSessionId: peer?.uploadSessionId,
-				dirty: true as boolean | undefined,
-			};
-			queueMicrotask(() => {
-				if (this.editingId === note.id) this.applyRemoteDraft(note.id, draft);
-			});
-		}
-		this.acquireOriginSession(note.id);
+			if (hasUnsaved) {
+				const draft = {
+					html: draftStr,
+					title: peer?.title || note.title || '',
+					uploadSessionId: peer?.uploadSessionId,
+					dirty: true as boolean | undefined,
+				};
+				queueMicrotask(() => {
+					if (this.editingId === note.id) this.applyRemoteDraft(note.id, draft);
+				});
+			}
+			this.acquireOriginSession(note.id);
+		});
 	}
 
 	async openEditById(id: string): Promise<void> {
@@ -1251,7 +1272,7 @@ class LearningNotesStore {
 				if (this.editingId === id) {
 					this.editingId = null;
 					this.editorInitial = EMPTY_NOTE_DOC;
-					this.editorSeed += 1;
+					this.bumpEditorSeed();
 				}
 				if (this.boundNoteId === id) this.boundNoteId = null;
 				this.pendingDeleteId = null;

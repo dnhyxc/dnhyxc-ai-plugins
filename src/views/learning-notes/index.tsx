@@ -293,13 +293,9 @@ function LearningNotesApp({ api }: HostBridgeProps) {
 	}, [store]);
 
 	const editorMatchesTarget = useCallback(() => {
-		// 只比绑定 id：epoch 未对齐时 bound 已被清空，再卡 epoch 会导致快照读空，
-		// 进而 openPreview/detail 用服务端旧稿盖掉未保存正文
+		// 与 registerEditorSnapshot 一致：新建笔记双方均为 null 时仍可读/可存
 		const targetId = store.editingId ?? store.boundNoteId;
-		return (
-			editorBoundNoteIdRef.current != null &&
-			editorBoundNoteIdRef.current === targetId
-		);
+		return editorBoundNoteIdRef.current === targetId;
 	}, [store]);
 
 	/** 切笔记时重置基线，避免沿用上一篇的 baseline / dirty */

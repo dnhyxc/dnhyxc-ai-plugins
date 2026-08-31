@@ -45,12 +45,12 @@ function EbookTestBookInfoApp({ api }: EbookTestBridgeProps) {
 	);
 }
 
-EbookTestBookInfoApp.activate = async (api: EbookTestBridgeProps['api']) => {
-	console.log('[ebook-test-book-info] activate', api);
+EbookTestBookInfoApp.activate = async (_api: EbookTestBridgeProps['api']) => {
+	// console.log('[ebook-test-book-info] activate', api);
 };
 
 EbookTestBookInfoApp.deactivate = () => {
-	console.log('[ebook-test-book-info] deactivate');
+	// console.log('[ebook-test-book-info] deactivate');
 };
 
 export default EbookTestBookInfoApp;

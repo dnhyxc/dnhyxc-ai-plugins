@@ -34,6 +34,7 @@
 
 | 文档 | 功能模块 | 核心技术 | 说明 |
 |------|----------|----------|------|
+| [app/启用生命周期钩子.md](./app/启用生命周期钩子.md) | **子应用 activate/deactivate 注册与静默** | Module Federation 静态属性钩子 + `_api` 未用约定 | 横切于各视图子应用的生命周期治理 |
 | [i18n-system.md](./i18n-system.md) | **国际化系统 (i18n)** | globalThis 单例 + 发布-订阅 | zh-CN / en-US 双语 |
 | [design-system.md](./design-system.md) | **设计系统组件库** | Radix UI + Tailwind CSS v4 | 11+ 基础组件 |
 
@@ -76,6 +77,9 @@
 ```
 docs/
 ├── README.md                              ← 你在这里
+├── app/                                   ← 横切框架域（生命周期等非单一业务页）
+│   ├── README.md                          ← 功能域索引
+│   └── 启用生命周期钩子.md                 ← activate/deactivate 注册与静默
 ├── rich-editor.md                         ← 富文本编辑器（最复杂组件）
 ├── rich-editor/
 │   ├── README.md                          ← 功能域索引
@@ -110,4 +114,4 @@ docs/
 
 ---
 
-*最后更新: 2025*
+*最后更新: 2026-09*

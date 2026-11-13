@@ -401,7 +401,7 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 					</button>
 				</div>
 			</div>
-			<div className="bg-theme/5 border-theme/5 mx-3.5 mt-1.5 flex min-h-0 flex-[2] flex-col overflow-hidden rounded-md border py-2">
+			<div className="bg-theme/5 border-theme/5 mx-3.5 mt-1.5 flex min-h-0 flex-2 flex-col overflow-hidden rounded-md border py-2">
 				<ScrollArea
 					className="min-h-0 flex-1"
 					scrollbarClassName="right-0 w-1.5 border-l-0 p-0"
@@ -427,7 +427,7 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 			</p>
 			<ScrollArea
 				ref={listViewportRef}
-				className="box-border flex min-h-0 flex-[5] flex-col px-3.5"
+				className="box-border flex min-h-0 flex-5 flex-col px-3.5"
 			>
 				{listLoading && items.length === 0 ? (
 					<p className="text-textcolor/55 px-2 py-6 text-center text-xs">
@@ -529,7 +529,7 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 			) : null}
 			{detailGroups.length > 0 ? (
 				<ScrollArea
-					className="mt-1 min-h-0 flex-[3]"
+					className="mt-1 min-h-0 flex-3"
 					scrollbarClassName="right-0 w-1.5 border-l-0 p-0"
 				>
 					<div className="space-y-2 px-3.5">

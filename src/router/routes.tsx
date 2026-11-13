@@ -50,7 +50,7 @@ export const routes: RouteObject[] = [
 			{
 				path: 'english-learning/vocab-detail',
 				element: (
-					<div className="h-full min-h-[28rem]">
+					<div className="h-full min-h-112">
 						<VocabDetailApp
 							api={mockApi({
 								http: {
@@ -93,7 +93,7 @@ export const routes: RouteObject[] = [
 			{
 				path: 'english-learning/vocab-detail-list',
 				element: (
-					<div className="h-full min-h-[28rem]">
+					<div className="h-full min-h-112">
 						<VocabDetailListApp
 							api={mockApi({
 								http: {
@@ -120,7 +120,7 @@ export const routes: RouteObject[] = [
 			{
 				path: 'english-learning/vocab-detail-import',
 				element: (
-					<div className="h-full min-h-[28rem]">
+					<div className="h-full min-h-112">
 						<VocabDetailImportApp
 							api={mockApi({
 								http: {

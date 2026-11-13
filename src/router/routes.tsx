@@ -8,6 +8,10 @@ import { EmbedIdeasList, EmbedLearningNotes } from '@/views/embed';
 import Home from '@/views/home';
 import LearningNotesApp from '@/views/learning-notes';
 import VideoPlayerApp from '@/views/video-player';
+import VocabDetailApp from '@/views/vocab-detail';
+import { previewDetail, previewSnapshot } from '@/views/vocab-detail/preview';
+import VocabDetailImportApp from '@/views/vocab-detail-import';
+import VocabDetailListApp from '@/views/vocab-detail-list';
 
 const mockEbookModules = {
 	ebook: {
@@ -19,6 +23,23 @@ const mockEbookModules = {
 	},
 };
 
+const mockVocabDetailModule = {
+	getSnapshot: () => previewSnapshot,
+	subscribeVocabDetail: () => () => undefined,
+	play: (text: string) =>
+		new Promise<void>((resolve) => {
+			const utter = new SpeechSynthesisUtterance(text);
+			utter.lang = 'en-US';
+			utter.onend = () => resolve();
+			utter.onerror = () => resolve();
+			speechSynthesis.cancel();
+			speechSynthesis.speak(utter);
+		}),
+	stop: () => speechSynthesis.cancel(),
+	open: () => true,
+	setListStats: () => undefined,
+};
+
 /** 独立预览路由；path 与主站 registry / 业务树对齐 */
 export const routes: RouteObject[] = [
 	{
@@ -26,6 +47,111 @@ export const routes: RouteObject[] = [
 		element: <Layout />,
 		children: [
 			{ index: true, element: <Home /> },
+			{
+				path: 'english-learning/vocab-detail',
+				element: (
+					<div className="h-full min-h-[28rem]">
+						<VocabDetailApp
+							api={mockApi({
+								http: {
+									get: async () => ({
+										data: {
+											detail: previewDetail,
+											source: 'manual',
+											ipa: previewSnapshot.ipa,
+											pos: previewSnapshot.pos,
+											versions: {
+												manual: previewDetail,
+												generated: {
+													...previewDetail,
+													memory: { hookZh: '这是之前生成的记忆。' },
+												},
+												regen: null,
+											},
+										},
+									}),
+									post: async (url: string) => {
+										if (url.includes('regenerate')) {
+											return {
+												data: {
+													detail: {
+														...previewDetail,
+														memory: { hookZh: '这是重新生成的记忆。' },
+													},
+												},
+											};
+										}
+										return { data: { cancelled: true } };
+									},
+								},
+								modules: { vocabDetail: mockVocabDetailModule },
+							})}
+						/>
+					</div>
+				),
+			},
+			{
+				path: 'english-learning/vocab-detail-list',
+				element: (
+					<div className="h-full min-h-[28rem]">
+						<VocabDetailListApp
+							api={mockApi({
+								http: {
+									get: async () => ({
+										data: {
+											items: [
+												{
+													lemma: previewDetail.lemma,
+													glossZh: previewDetail.senses[0]?.glossZh ?? '',
+													updatedAt: new Date().toISOString(),
+												},
+											],
+											nextCursor: null,
+											total: 1,
+										},
+									}),
+								},
+								modules: { vocabDetail: mockVocabDetailModule },
+							})}
+						/>
+					</div>
+				),
+			},
+			{
+				path: 'english-learning/vocab-detail-import',
+				element: (
+					<div className="h-full min-h-[28rem]">
+						<VocabDetailImportApp
+							api={mockApi({
+								http: {
+									get: async () => ({
+										data: {
+											items: [
+												{
+													lemma: previewDetail.lemma,
+													glossZh: previewDetail.senses[0]?.glossZh ?? '',
+													updatedAt: new Date().toISOString(),
+												},
+											],
+											nextCursor: null,
+											total: 1,
+										},
+									}),
+								},
+								modules: {
+									vocabDetailImport: {
+										getTarget: () => ({
+											libraryId: 'preview-library',
+											title: 'Preview library',
+										}),
+										subscribe: () => () => undefined,
+									},
+								},
+							})}
+						/>
+					</div>
+				),
+			},
 			{
 				path: 'english-learning/notes',
 				element: (

@@ -37,6 +37,18 @@ export default function Layout() {
 	const allLinks: NavItem[] = [
 		{ to: '/', label: t('layout.home'), end: true },
 		{ to: '/english-learning/notes', label: t('layout.learningNotes') },
+		{
+			to: '/english-learning/vocab-detail',
+			label: t('layout.vocabDetail'),
+		},
+		{
+			to: '/english-learning/vocab-detail-list',
+			label: t('layout.vocabDetailList'),
+		},
+		{
+			to: '/english-learning/vocab-detail-import',
+			label: t('layout.vocabImport'),
+		},
 		{ to: '/ebook/plugins/ideas-list', label: t('layout.ideasList') },
 		{ to: '/ebook/plugins/highlights', label: t('layout.ebookHighlights') },
 		{

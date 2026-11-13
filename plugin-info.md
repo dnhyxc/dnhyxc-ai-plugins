@@ -32,6 +32,8 @@ pnpm -C apps/remote-plugins dev
 | --------------------------------- | -------------------------------------------------------- |
 | `/`                               | 插件目录（带预览壳）                                     |
 | `/english-learning/notes`         | 学习笔记（预览壳）                                       |
+| `/english-learning/vocab-detail`  | 单词解析（预览壳，mock 快照与解析）                      |
+| `/english-learning/vocab-detail-list` | 单词解析列表（预览壳，mock 列表）                    |
 | `/ebook/plugins/ideas-list`       | EPUB 想法列表（预览壳，mock Host）                       |
 | `/embed/ebook/plugins/ideas-list` | **Host `iframeUrl` 用这个**：无壳，postMessage 接真 Host |
 | `/embed/english-learning/notes`   | 同上，学习笔记 embed                                     |
@@ -78,6 +80,9 @@ src/
 | `./EbookHighlights`   | EPUB 全书划线列表（滚动分页）                               | `ebookHighlights`   |
 | `./EbookTestBookInfo` | 阅读页 Host 槽测试：书信息 + Toast；`lifecycle` 订阅 locale | `ebookTestBookInfo` |
 | `./LearningNotes`     | 英语学习 · 学习笔记（业务页内嵌）                           | `learningNotes`     |
+| `./VocabDetail`       | 英语学习 · 单词卡详解（收藏星后的图标 + 抽屉）              | `vocabDetail`       |
+| `./VocabDetailList`   | 英语学习 · 已生成详解列表（词库顶栏收藏右侧）              | `vocabDetailList`   |
+| `./VocabDetailImport` | 英语学习 · 手动导入单词详解（词库卡片编辑右侧）            | `vocabDetailImport` |
 
 后续新插件：在 `src/views/<name>/` 加模块，并在 `vite.config.ts` `exposes` 与 Host registry 各加一条（共用同一 `remoteName` + `entry`）。
 

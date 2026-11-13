@@ -2,11 +2,14 @@ import {
 	ArrowRight,
 	BookOpen,
 	Brain,
+	FileUp,
 	Highlighter,
 	Library,
+	List,
 	type LucideIcon,
 	Play,
 	Sparkles,
+	TextSearch,
 	Zap,
 } from 'lucide-react';
 import { Link } from 'react-router';
@@ -32,6 +35,27 @@ export default function Home() {
 			desc: t('home.learningNotes.desc'),
 			category: t('home.category.learning'),
 			icon: Brain,
+		},
+		{
+			to: '/english-learning/vocab-detail',
+			title: t('home.vocabDetail.title'),
+			desc: t('home.vocabDetail.desc'),
+			category: t('home.category.learning'),
+			icon: TextSearch,
+		},
+		{
+			to: '/english-learning/vocab-detail-list',
+			title: t('home.vocabDetailList.title'),
+			desc: t('home.vocabDetailList.desc'),
+			category: t('home.category.learning'),
+			icon: List,
+		},
+		{
+			to: '/english-learning/vocab-detail-import',
+			title: t('home.vocabImport.title'),
+			desc: t('home.vocabImport.desc'),
+			category: t('home.category.learning'),
+			icon: FileUp,
 		},
 		{
 			to: '/ebook/plugins/ideas-list',

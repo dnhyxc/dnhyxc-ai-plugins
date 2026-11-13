@@ -3,6 +3,7 @@ import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import { ScrollArea } from './scroll-area';
 
 function DropdownMenu({
 	...props
@@ -32,19 +33,54 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
 	className,
 	sideOffset = 4,
+	children,
+	scrollable = true,
+	viewportClassName = 'max-h-(--radix-dropdown-menu-content-available-height)',
+	scrollClassName,
 	...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+	/** 默认用 ScrollArea；已自管滚动时传 false */
+	scrollable?: boolean;
+	/** 传给 ScrollArea root/viewport 的高度上限（须显式 max-h 才能滚） */
+	scrollClassName?: string;
+	viewportClassName?: string;
+}) {
 	return (
 		<DropdownMenuPrimitive.Portal>
 			<DropdownMenuPrimitive.Content
 				data-slot="dropdown-menu-content"
 				sideOffset={sideOffset}
 				className={cn(
-					'bg-theme-background text-textcolor data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border border-theme/5 p-1 shadow-md',
+					'bg-theme-background text-textcolor data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-md border border-theme/5 shadow-md',
+					scrollable
+						? cn('p-0', scrollClassName)
+						: cn('max-h-(--radix-dropdown-menu-content-available-height) p-1'),
 					className,
 				)}
 				{...props}
-			/>
+			>
+				{scrollable ? (
+					<ScrollArea
+						className={cn('w-full min-h-0 border-0', scrollClassName)}
+						viewportClassName={cn(
+							'box-border p-2 px-2.5 [&>div]:min-h-0!',
+							viewportClassName,
+						)}
+						scrollbarClassName="w-1.5 border-l-0 p-0"
+						onWheel={(event) => {
+							event.stopPropagation();
+							event.currentTarget.scrollTop += event.deltaY;
+						}}
+						onWheelCapture={(event) => {
+							event.stopPropagation();
+						}}
+					>
+						{children}
+					</ScrollArea>
+				) : (
+					children
+				)}
+			</DropdownMenuPrimitive.Content>
 		</DropdownMenuPrimitive.Portal>
 	);
 }
@@ -72,7 +108,7 @@ function DropdownMenuItem({
 			data-inset={inset}
 			data-variant={variant}
 			className={cn(
-				"cursor-pointer focus:bg-theme/5 focus:text-textcolor data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:text-destructive! [&_svg:not([class*='text-'])]:text-muted-foreground relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+				"cursor-pointer hover:bg-theme/10 focus:bg-theme/10 data-[highlighted]:bg-theme/10 hover:text-textcolor focus:text-textcolor data-[highlighted]:text-textcolor data-[variant=destructive]:text-teal-500 data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-teal-500 data-[variant=destructive]:*:[svg]:text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 				className,
 			)}
 			{...props}

@@ -49,6 +49,9 @@ export default defineConfig(({ mode }) => {
 					'./EbookTestBookInfo': './src/views/ebook/toolbar-test/index.ts',
 					'./LearningNotes': './src/views/learning-notes/index.tsx',
 					'./VideoPlayer': './src/views/video-player/index.tsx',
+					'./VocabDetail': './src/views/vocab-detail/index.ts',
+					'./VocabDetailList': './src/views/vocab-detail-list/index.ts',
+					'./VocabDetailImport': './src/views/vocab-detail-import/index.ts',
 				},
 				shared: {
 					react: { singleton: true, requiredVersion: '^19.1.0' },

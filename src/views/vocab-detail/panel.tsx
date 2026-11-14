@@ -30,11 +30,8 @@ import {
 	type VersionSource,
 	type VocabVersions,
 } from './api';
-import type {
-	VocabCardSnapshot,
-	VocabDetail,
-	VocabDetailModule,
-} from './types';
+import { cardFromPayload, type PointModule } from './point';
+import type { VocabCardSnapshot, VocabDetail } from './types';
 
 type HostApi = {
 	locale?: 'zh-CN' | 'en-US';
@@ -46,7 +43,7 @@ type HostApi = {
 		get: (url: string) => Promise<unknown>;
 		post?: (url: string, body?: unknown) => Promise<unknown>;
 	};
-	modules?: { vocabDetail?: VocabDetailModule };
+	modules?: { point?: PointModule };
 };
 
 function displayIpa(ipa: string): string {
@@ -512,7 +509,7 @@ function DetailSections({
 export default function VocabDetailPanel({ api }: { api: HostApi }) {
 	const { t } = useI18n();
 	useHostLocale(api);
-	const bridge = api.modules?.vocabDetail;
+	const point = api.modules?.point;
 	const httpRef = useRef(api.http);
 	httpRef.current = api.http;
 	const [card, setCard] = useState<VocabCardSnapshot | null>(null);
@@ -531,19 +528,18 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 	const regenRun = useRef(0);
 
 	const togglePlay = (key: string, text: string) => {
-		const speak = bridge?.play;
-		if (!text.trim() || !speak) return;
+		if (!text.trim() || !point) return;
 		if (playingKey === key) {
 			playRun.current += 1;
-			bridge?.stop?.();
+			point.command('stop', undefined);
 			setPlayingKey(null);
 			return;
 		}
 		playRun.current += 1;
 		const run = playRun.current;
-		bridge?.stop?.();
+		point.command('stop', undefined);
 		setPlayingKey(key);
-		void speak(text).finally(() => {
+		void Promise.resolve(point.command('play', text)).finally(() => {
 			if (playRun.current === run) setPlayingKey(null);
 		});
 	};
@@ -551,16 +547,16 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 	useEffect(() => {
 		return () => {
 			playRun.current += 1;
-			bridge?.stop?.();
+			point?.command('stop', undefined);
 		};
-	}, [bridge]);
+	}, [point]);
 
 	useEffect(() => {
-		if (!bridge) return;
-		const pull = () => setCard(bridge.getSnapshot());
+		if (!point) return;
+		const pull = () => setCard(cardFromPayload(point.getPayload('drawer')));
 		pull();
-		return bridge.subscribeVocabDetail(pull);
-	}, [bridge]);
+		return point.subscribe(pull);
+	}, [point]);
 
 	useEffect(() => {
 		const word = card?.word.trim();
@@ -577,9 +573,14 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 		setGenerating(false);
 		regenRun.current += 1;
 		let cancelled = false;
-		const setPending = bridge?.setPending;
+		const setPending = (pending: boolean) =>
+			point?.publishSignal('pending', {
+				pluginId: 'vocabDetail',
+				key: word,
+				on: pending,
+			});
 		void loadVocabDetail(http, word, {
-			setPending: (pending) => setPending?.(word, pending),
+			setPending,
 			setGenerating: (on) => {
 				if (!cancelled) setGenerating(on);
 			},
@@ -606,10 +607,10 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 		return () => {
 			cancelled = true;
 			playRun.current += 1;
-			bridge?.stop?.();
+			point?.command('stop', undefined);
 			setPlayingKey(null);
 		};
-	}, [attempt, bridge, card?.word]);
+	}, [attempt, point, card?.word]);
 
 	const stopGenerate = () => {
 		const word = card?.word.trim();
@@ -693,7 +694,7 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 					<WordHead
 						card={shownCard}
 						playing={playingKey === `word:${card?.word ?? ''}`}
-						onPlay={bridge?.play ? togglePlay : undefined}
+						onPlay={point ? togglePlay : undefined}
 					/>
 					{!card?.word ? (
 						<p className="text-textcolor/55 text-sm">
@@ -748,7 +749,7 @@ export default function VocabDetailPanel({ api }: { api: HostApi }) {
 						<DetailSections
 							detail={detail}
 							playingKey={playingKey}
-							onPlay={bridge?.play ? togglePlay : undefined}
+							onPlay={point ? togglePlay : undefined}
 						/>
 					) : null}
 					{detail && source ? (

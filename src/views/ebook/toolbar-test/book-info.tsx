@@ -2,16 +2,18 @@ import { Button } from '@ui/index';
 import { useHostLocale, useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
 import '@/styles.css';
-import { type EbookTestBridgeProps, readEbookModules } from './bridge';
+import { type PointModule, useBookPoint } from '@/views/ebook/point';
+import type { EbookTestBridgeProps } from './bridge';
 
 /** 阅读页 Host 槽测试：toolbar 内联展示书名/Id + Toast */
 function EbookTestBookInfoApp({ api }: EbookTestBridgeProps) {
 	const { t } = useI18n();
 	useHostLocale(api);
 
-	const ebook = readEbookModules(api);
-	const bookId = ebook?.getBookId() ?? null;
-	const bookTitle = ebook?.getBookTitle() ?? '';
+	const point = api.modules?.point as PointModule | undefined;
+	const book = useBookPoint(point);
+	const bookId = book.bookId || null;
+	const bookTitle = book.bookTitle;
 	const label = bookTitle || bookId || t('ebookTest.bookInfo.unbound');
 
 	return (

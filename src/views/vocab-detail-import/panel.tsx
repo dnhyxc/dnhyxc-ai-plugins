@@ -3,17 +3,13 @@ import { Button, ScrollArea } from '@ui/index';
 import { CheckCircle, Copy } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHostLocale, useI18n } from '@/hooks';
+import {
+	importTargetFromPayload,
+	type PointModule,
+} from '@/views/vocab-detail/point';
 import { IMPORT_PROMPT } from './prompt';
 
 type Target = { libraryId: string; title: string };
-
-type ImportModule = {
-	getTarget: () => Target | null;
-	subscribe: (listener: () => void) => () => void;
-	open?: (word: string) => boolean;
-	/** 主项目里选一个 JSON 文件；取消为 null。预览壳没有这个方法。 */
-	pickJsonFile?: () => Promise<File | null>;
-};
 
 type HostApi = {
 	locale?: 'zh-CN' | 'en-US';
@@ -28,7 +24,7 @@ type HostApi = {
 			type?: 'success' | 'error' | 'info';
 		}) => void;
 	};
-	modules?: { vocabDetailImport?: ImportModule };
+	modules?: { point?: PointModule };
 };
 
 type ImportResult = {
@@ -133,11 +129,11 @@ function errorText(cause: unknown, fallback: string): string {
 export default function VocabImportPanel({ api }: { api: HostApi }) {
 	const { t, locale } = useI18n();
 	useHostLocale(api);
-	const bridge = api.modules?.vocabDetailImport;
+	const point = api.modules?.point;
 	const httpRef = useRef(api.http);
 	httpRef.current = api.http;
-	const [target, setTarget] = useState<Target | null>(
-		() => bridge?.getTarget() ?? null,
+	const [target, setTarget] = useState<Target | null>(() =>
+		importTargetFromPayload(point?.getPayload('import-drawer') ?? null),
 	);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -159,9 +155,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 	const sentinelRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
-		if (!bridge) return;
-		return bridge.subscribe(() => setTarget(bridge.getTarget()));
-	}, [bridge]);
+		if (!point) return;
+		return point.subscribe(() =>
+			setTarget(importTargetFromPayload(point.getPayload('import-drawer'))),
+		);
+	}, [point]);
 
 	useEffect(
 		() => () => {
@@ -331,13 +329,15 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 	};
 
 	const chooseFile = async () => {
-		const pick = bridge?.pickJsonFile;
+		const pick = point?.command;
 		if (!pick) {
 			fileRef.current?.click();
 			return;
 		}
 		try {
-			const file = await pick();
+			const file = await Promise.resolve(
+				point.command('pickJsonFile', undefined) as Promise<File | null>,
+			);
 			if (file) await onFile(file);
 		} catch (cause) {
 			const message = cause instanceof Error ? cause.message : '';
@@ -350,7 +350,7 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 	};
 
 	const onPick = (lemma: string) => {
-		const opened = bridge?.open?.(lemma) ?? false;
+		const opened = point?.command('openCard', lemma) === true;
 		if (!opened) {
 			api.ui?.showToast({
 				message: t('vocabImport.needDetail'),

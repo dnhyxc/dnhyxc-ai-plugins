@@ -1,4 +1,3 @@
-// import { readEbookModules } from './bridge';
 import type { EbookTestBridgeProps } from './bridge';
 
 /** Host 经 eventBus 推 locale；订阅须在 deactivate 卸掉 */
@@ -15,7 +14,7 @@ export async function activate(api: EbookTestBridgeProps['api']) {
 
 	offLocale = () => api.event.off('locale', onLocale);
 
-	// const bookId = readEbookModules(api)?.getBookId() ?? null;
+	// const bookId = (api.modules?.point as { getContext?: () => { bookId?: string } | null } | undefined)?.getContext?.()?.bookId;
 	// api.ui?.showToast({
 	// 	type: 'info',
 	// 	message: bookId

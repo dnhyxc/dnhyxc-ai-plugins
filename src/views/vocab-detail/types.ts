@@ -22,11 +22,3 @@ export type VocabDetail = {
 	synonyms: { word: string; pos: string; glossZh: string }[];
 	tags: string[];
 };
-
-export type VocabDetailModule = {
-	getSnapshot: () => VocabCardSnapshot | null;
-	subscribeVocabDetail: (listener: () => void) => () => void;
-	setPending?: (word: string, pending: boolean) => void;
-	play?: (text: string) => Promise<void>;
-	stop?: () => void;
-};

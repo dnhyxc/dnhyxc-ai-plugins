@@ -9,35 +9,52 @@ import Home from '@/views/home';
 import LearningNotesApp from '@/views/learning-notes';
 import VideoPlayerApp from '@/views/video-player';
 import VocabDetailApp from '@/views/vocab-detail';
+import type { PointModule } from '@/views/vocab-detail/point';
 import { previewDetail, previewSnapshot } from '@/views/vocab-detail/preview';
 import VocabDetailImportApp from '@/views/vocab-detail-import';
 import VocabDetailListApp from '@/views/vocab-detail-list';
 
-const mockEbookModules = {
-	ebook: {
-		getBookId: () => 'preview-book',
-		getBookTitle: () => 'Standalone preview book',
-		navigateToCfi: () => undefined,
-		openThought: () => undefined,
-		closeIdeasList: () => undefined,
-	},
+const ebookPoint: PointModule = {
+	getContext: () => ({
+		bookId: 'preview-book',
+		bookTitle: 'Standalone preview book',
+	}),
+	getPayload: () => null,
+	subscribe: () => () => undefined,
+	publishSignal: () => undefined,
+	command: () => undefined,
 };
 
-const mockVocabDetailModule = {
-	getSnapshot: () => previewSnapshot,
-	subscribeVocabDetail: () => () => undefined,
-	play: (text: string) =>
-		new Promise<void>((resolve) => {
-			const utter = new SpeechSynthesisUtterance(text);
-			utter.lang = 'en-US';
-			utter.onend = () => resolve();
-			utter.onerror = () => resolve();
+const previewPoint: PointModule = {
+	getContext: () => ({ libraryId: 'preview-library' }),
+	getPayload: (slot) => {
+		if (slot === 'drawer') return previewSnapshot;
+		if (slot === 'import-drawer') {
+			return { libraryId: 'preview-library', title: 'Preview library' };
+		}
+		return null;
+	},
+	subscribe: () => () => undefined,
+	publishSignal: () => undefined,
+	command: (name, arg) => {
+		if (name === 'stop') {
 			speechSynthesis.cancel();
-			speechSynthesis.speak(utter);
-		}),
-	stop: () => speechSynthesis.cancel(),
-	open: () => true,
-	setListStats: () => undefined,
+			return undefined;
+		}
+		if (name === 'play' && typeof arg === 'string') {
+			return new Promise<void>((resolve) => {
+				const utter = new SpeechSynthesisUtterance(arg);
+				utter.lang = 'en-US';
+				utter.onend = () => resolve();
+				utter.onerror = () => resolve();
+				speechSynthesis.cancel();
+				speechSynthesis.speak(utter);
+			});
+		}
+		if (name === 'openCard') return true;
+		if (name === 'pickJsonFile') return Promise.resolve(null);
+		return undefined;
+	},
 };
 
 /** 独立预览路由；path 与主站 registry / 业务树对齐 */
@@ -84,7 +101,7 @@ export const routes: RouteObject[] = [
 										return { data: { cancelled: true } };
 									},
 								},
-								modules: { vocabDetail: mockVocabDetailModule },
+								modules: { point: previewPoint },
 							})}
 						/>
 					</div>
@@ -111,7 +128,7 @@ export const routes: RouteObject[] = [
 										},
 									}),
 								},
-								modules: { vocabDetail: mockVocabDetailModule },
+								modules: { point: previewPoint },
 							})}
 						/>
 					</div>
@@ -138,15 +155,7 @@ export const routes: RouteObject[] = [
 										},
 									}),
 								},
-								modules: {
-									vocabDetailImport: {
-										getTarget: () => ({
-											libraryId: 'preview-library',
-											title: 'Preview library',
-										}),
-										subscribe: () => () => undefined,
-									},
-								},
+								modules: { point: previewPoint },
 							})}
 						/>
 					</div>
@@ -167,7 +176,7 @@ export const routes: RouteObject[] = [
 				element: (
 					<IdeasListApp
 						independent
-						api={mockApi({ modules: mockEbookModules })}
+						api={mockApi({ modules: { point: ebookPoint } })}
 						plugin={mockPlugin('ebookIdeas', '/ebook/plugins/ebook-ideas')}
 					/>
 				),
@@ -177,7 +186,7 @@ export const routes: RouteObject[] = [
 				element: (
 					<EbookHighlightsApp
 						independent
-						api={mockApi({ modules: mockEbookModules })}
+						api={mockApi({ modules: { point: ebookPoint } })}
 						plugin={mockPlugin('ebookHighlights', '/ebook/plugins/highlights')}
 					/>
 				),
@@ -187,7 +196,7 @@ export const routes: RouteObject[] = [
 				element: (
 					<EbookTestBookInfoApp
 						independent
-						api={mockApi({ modules: mockEbookModules })}
+						api={mockApi({ modules: { point: ebookPoint } })}
 						plugin={mockPlugin(
 							'ebookTestBookInfo',
 							'/ebook/plugins/toolbar-test',

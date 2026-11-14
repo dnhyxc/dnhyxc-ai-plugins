@@ -1,14 +1,5 @@
 import type { Locale } from '@/i18n';
 
-/** 测试用 ebook Host API 子集 */
-export type EbookTestModules = {
-	getBookId: () => string | null;
-	getBookTitle: () => string | null;
-	navigateToCfi: (cfi: string) => void | Promise<void>;
-	openThought: (thought: unknown) => void;
-	closeIdeasList?: () => void;
-};
-
 export type EbookTestBridgeProps = {
 	api: {
 		theme: 'light' | 'dark';
@@ -29,9 +20,3 @@ export type EbookTestBridgeProps = {
 	plugin: { id: string; version: string; routePath: string };
 	independent?: boolean;
 };
-
-export function readEbookModules(
-	api: EbookTestBridgeProps['api'],
-): EbookTestModules | undefined {
-	return api.modules?.ebook as EbookTestModules | undefined;
-}

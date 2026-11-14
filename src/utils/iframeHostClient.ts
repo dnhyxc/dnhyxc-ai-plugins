@@ -161,37 +161,43 @@ export function connectIframeHost(pluginId: string): Promise<HostBridgeProps> {
 								>,
 						},
 						modules: {
-							ebook: {
-								getBookId: () => null,
-								getBookTitle: () => null,
-								navigateToCfi: (cfi: string) =>
-									rpc('ebook.navigateToCfi', [cfi]),
-								openThought: (thought: unknown) =>
-									rpc('ebook.openThought', [thought]),
-								closeIdeasList: () => rpc('ebook.closeIdeasList'),
+							point: {
+								getContext: () => null as Record<string, unknown> | null,
+								getPayload: () => null,
+								subscribe: () => () => undefined,
+								publishSignal: () => undefined,
+								command: (name: string, arg?: unknown) => {
+									if (name === 'navigateToCfi') {
+										return rpc('ebook.navigateToCfi', [arg]);
+									}
+									if (name === 'openThought') {
+										return rpc('ebook.openThought', [arg]);
+									}
+									if (name === 'closeIdeasList') {
+										return rpc('ebook.closeIdeasList');
+									}
+									return undefined;
+								},
 							},
 						},
 					},
 					plugin,
 				};
 
-				// IdeasList 同步读 getBookId()；RPC 异步 → 预取后改写为同步返回
+				// 列表同步读 getContext()；RPC 异步，预取后改写成同步返回
 				void (async () => {
 					try {
 						const [bookId, bookTitle] = await Promise.all([
 							rpc('ebook.getBookId'),
 							rpc('ebook.getBookTitle'),
 						]);
-						const ebook = bridge.api.modules!.ebook as {
-							getBookId: () => string | null;
-							getBookTitle: () => string | null;
+						const point = bridge.api.modules!.point as {
+							getContext: () => Record<string, unknown> | null;
 						};
-						ebook.getBookId = () =>
-							typeof bookId === 'string' || bookId === null ? bookId : null;
-						ebook.getBookTitle = () =>
-							typeof bookTitle === 'string' || bookTitle === null
-								? bookTitle
-								: null;
+						point.getContext = () => ({
+							...(typeof bookId === 'string' ? { bookId } : {}),
+							...(typeof bookTitle === 'string' ? { bookTitle } : {}),
+						});
 						if (!settled) {
 							settled = true;
 							resolve(bridge);

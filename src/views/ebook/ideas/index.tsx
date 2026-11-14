@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHostLocale, useI18n } from '@/hooks';
 import type { Locale } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { type PointModule, useBookPoint } from '@/views/ebook/point';
 import '@/styles.css';
 import { Quote } from 'lucide-react';
 
@@ -20,14 +21,6 @@ type Thought = {
 	createdAt?: string;
 	updatedAt?: string;
 	isPublic?: boolean;
-};
-
-type EbookModules = {
-	getBookId: () => string | null;
-	getBookTitle: () => string | null;
-	navigateToCfi: (cfi: string) => void | Promise<void>;
-	openThought: (thought: Thought) => void;
-	closeIdeasList?: () => void;
 };
 
 type HostBridgeProps = {
@@ -97,9 +90,10 @@ function IdeasListApp({ api }: HostBridgeProps) {
 	const { t, locale } = useI18n();
 	useHostLocale(api);
 
-	const ebook = api.modules?.ebook as EbookModules | undefined;
-	const bookId = ebook?.getBookId() ?? null;
-	const bookTitle = ebook?.getBookTitle() ?? null;
+	const point = api.modules?.point as PointModule | undefined;
+	const book = useBookPoint(point);
+	const bookId = book.bookId || null;
+	const bookTitle = book.bookTitle || null;
 	const [items, setItems] = useState<Thought[]>([]);
 	const [pageNo, setPageNo] = useState(0);
 	const [total, setTotal] = useState(0);
@@ -182,9 +176,9 @@ function IdeasListApp({ api }: HostBridgeProps) {
 
 	const onOpen = (thought: Thought) => {
 		const cfi = thought.cfiRange?.trim();
-		if (cfi) void ebook?.navigateToCfi(cfi);
-		ebook?.openThought(thought);
-		ebook?.closeIdeasList?.();
+		if (cfi) void point?.command('navigateToCfi', cfi);
+		point?.command('openThought', thought);
+		point?.command('closeIdeasList', undefined);
 	};
 
 	return (

@@ -2,6 +2,10 @@ import Loading from '@design/Loading';
 import { Button, ScrollArea } from '@ui/index';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHostLocale, useI18n } from '@/hooks';
+import {
+	libraryIdFromContext,
+	type PointModule,
+} from '@/views/vocab-detail/point';
 
 type ListItem = {
 	lemma: string;
@@ -24,14 +28,7 @@ type HostApi = {
 			type?: 'success' | 'error' | 'info';
 		}) => void;
 	};
-	modules?: {
-		vocabDetail?: {
-			open?: (word: string) => boolean;
-			setListStats?: (stats: { total: number; loaded: number }) => void;
-			getListLibrary?: () => { libraryId: string } | null;
-			subscribeListLibrary?: (listener: () => void) => () => void;
-		};
-	};
+	modules?: { point?: PointModule };
 };
 
 function unwrap(res: unknown): ListPage {
@@ -116,7 +113,7 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 			cursorRef.current = page.nextCursor;
 			loadedRef.current += page.items.length;
 			setItems((prev) => [...prev, ...page.items]);
-			api.modules?.vocabDetail?.setListStats?.({
+			api.modules?.point?.publishSignal('stats', {
 				total: page.total,
 				loaded: loadedRef.current,
 			});
@@ -134,9 +131,9 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 	}, [api.http, api.modules]);
 
 	useEffect(() => {
-		const vocab = api.modules?.vocabDetail;
+		const point = api.modules?.point;
 		const apply = () => {
-			const next = vocab?.getListLibrary?.()?.libraryId ?? '';
+			const next = libraryIdFromContext(point?.getContext());
 			if (next === libraryRef.current && cursorRef.current !== undefined)
 				return;
 			libraryRef.current = next;
@@ -147,12 +144,12 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 			genRef.current += 1;
 			setItems([]);
 			setFailed(false);
-			vocab?.setListStats?.({ total: 0, loaded: 0 });
+			point?.publishSignal('stats', { total: 0, loaded: 0 });
 			if (!next) return setLoading(false);
 			void loadPage();
 		};
 		apply();
-		return vocab?.subscribeListLibrary?.(apply);
+		return point?.subscribe(apply);
 	}, [api.modules, loadPage]);
 
 	useEffect(() => {
@@ -177,7 +174,7 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 	};
 
 	const onPick = (lemma: string) => {
-		const opened = api.modules?.vocabDetail?.open?.(lemma) ?? false;
+		const opened = api.modules?.point?.command('openCard', lemma) === true;
 		if (!opened) {
 			api.ui?.showToast({
 				message: t('vocabDetailList.needDetail'),

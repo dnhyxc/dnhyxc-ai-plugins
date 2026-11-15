@@ -33,13 +33,19 @@ export function libraryIdFromContext(
 	return typeof libraryId === 'string' ? libraryId : '';
 }
 
+export type ImportTarget =
+	| { scope: 'dailyReading' }
+	| { scope: 'library'; libraryId: string; title: string };
+
 export function importTargetFromPayload(
 	payload: Record<string, unknown> | null,
-): { libraryId: string; title: string } | null {
+): ImportTarget | null {
+	if (payload?.scope === 'dailyReading') return { scope: 'dailyReading' };
 	if (!payload || typeof payload.libraryId !== 'string' || !payload.libraryId) {
 		return null;
 	}
 	return {
+		scope: 'library',
 		libraryId: payload.libraryId,
 		title: typeof payload.title === 'string' ? payload.title : '',
 	};

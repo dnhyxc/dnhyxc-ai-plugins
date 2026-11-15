@@ -9,7 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from '@ui/dropdown-menu';
 import { Button, ScrollArea } from '@ui/index';
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronsUpDown, FileDown, Sparkle } from 'lucide-react';
 import { type UIEvent, useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
@@ -79,6 +79,14 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 	const [nextCursor, setNextCursor] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [playingKey, setPlayingKey] = useState<string | null>(null);
+	const [caps, setCaps] = useState({
+		detail: false,
+		list: false,
+		import: false,
+	});
+	const [exportBusy, setExportBusy] = useState<ReadonlySet<string>>(
+		() => new Set(),
+	);
 	const ticketRef = useRef(0);
 	const loadingRef = useRef(false);
 	const playRun = useRef(0);
@@ -89,7 +97,34 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 	useEffect(() => {
 		return () => {
 			playRun.current += 1;
-			point?.command('stop', undefined);
+			// 离开英语学习时命令已解绑，主站会自己停朗读
+			try {
+				point?.command('stop', undefined);
+			} catch {
+				/* unbound */
+			}
+		};
+	}, [point]);
+
+	useEffect(() => {
+		let cancel = false;
+		void Promise.resolve(point?.command('detailEntries', undefined))
+			.then((value) => {
+				if (cancel || !value || typeof value !== 'object') return;
+				const row = value as {
+					detail?: unknown;
+					list?: unknown;
+					import?: unknown;
+				};
+				setCaps({
+					detail: row.detail === true,
+					list: row.list === true,
+					import: row.import === true,
+				});
+			})
+			.catch(() => undefined);
+		return () => {
+			cancel = true;
 		};
 	}, [point]);
 
@@ -253,6 +288,50 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 		setReadingId(id);
 	};
 
+	const needDetail = () => {
+		api.ui?.showToast({
+			message: t('dailyReadingWords.needDetail'),
+			type: 'info',
+		});
+	};
+
+	const openDetail = (item: ReadingWord) => {
+		const sentence =
+			item.sources.find((source) => source.sentence.trim())?.sentence ?? '';
+		const opened =
+			point?.command('openDetail', {
+				word: item.word,
+				translationZh: item.zh,
+				example: sentence,
+			}) === true;
+		if (!opened) needDetail();
+	};
+
+	const openList = () => {
+		if (point?.command('openDetailList', undefined) !== true) needDetail();
+	};
+
+	const openImport = () => {
+		if (point?.command('openDetailImport', undefined) !== true) needDetail();
+	};
+
+	const runExport = (format: 'json' | 'docx') => {
+		const row = sources.find((source) => source.readingId === readingId);
+		const titleZh =
+			row?.titleZh.trim() ||
+			(pinned.id === readingId ? pinned.titleZh.trim() : '');
+		setExportBusy((current) => new Set(current).add(format));
+		void Promise.resolve(
+			point?.command('exportWords', { format, readingId, q, titleZh }),
+		).finally(() => {
+			setExportBusy((current) => {
+				const next = new Set(current);
+				next.delete(format);
+				return next;
+			});
+		});
+	};
+
 	const openReading = (id: string) => {
 		const opened = api.modules?.point?.command('openReading', id) === true;
 		if (!opened) {
@@ -341,6 +420,53 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 					placeholder={t('dailyReadingWords.search')}
 					className="border-theme/15 bg-transparent px-2 text-sm shadow-none"
 				/>
+				<DropdownMenu modal={false}>
+					<DropdownMenuTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							className="shrink-0"
+							aria-label={t('dailyReadingWords.export')}
+						>
+							<FileDown className="size-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem
+							disabled={exportBusy.has('json')}
+							onSelect={() => runExport('json')}
+						>
+							{t('dailyReadingWords.exportJson')}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							disabled={exportBusy.has('docx')}
+							onSelect={() => runExport('docx')}
+						>
+							{t('dailyReadingWords.exportDocx')}
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+				{caps.list ? (
+					<Button
+						type="button"
+						variant="ghost"
+						className="shrink-0 text-teal-500"
+						onClick={openList}
+					>
+						{t('dailyReadingWords.detailList')}
+					</Button>
+				) : null}
+				{caps.import ? (
+					<Button
+						type="button"
+						variant="ghost"
+						className="shrink-0 text-teal-500"
+						onClick={openImport}
+					>
+						{t('dailyReadingWords.importDetail')}
+					</Button>
+				) : null}
 			</div>
 			{loading && items.length === 0 ? (
 				<Loading className="min-h-0 flex-1" />
@@ -361,9 +487,21 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 								{items.map((item) => (
 									<div
 										key={item.id}
-										className="bg-theme/5 border-theme/5 flex h-full min-w-0 flex-col gap-1 overflow-hidden rounded-md border p-2"
+										className="bg-theme/5 border-theme/5 relative flex h-full min-w-0 flex-col gap-1 overflow-hidden rounded-md border p-2"
 									>
-										<div className="flex items-center gap-1.5">
+										{caps.detail ? (
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-sm"
+												className="absolute top-2 right-2 size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
+												aria-label={t('dailyReadingWords.openDetail')}
+												onClick={() => openDetail(item)}
+											>
+												<Sparkle className="size-4" />
+											</Button>
+										) : null}
+										<div className="flex items-center gap-1.5 pr-7">
 											<div className="text-lg leading-7">{item.word}</div>
 											<PlayButton
 												look="plain"

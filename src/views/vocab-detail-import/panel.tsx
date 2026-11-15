@@ -4,12 +4,16 @@ import { CheckCircle, Copy } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHostLocale, useI18n } from '@/hooks';
 import {
+	type ImportTarget,
 	importTargetFromPayload,
 	type PointModule,
 } from '@/views/vocab-detail/point';
 import { IMPORT_PROMPT } from './prompt';
 
-type Target = { libraryId: string; title: string };
+function targetKey(target: ImportTarget | null): string {
+	if (!target) return '';
+	return target.scope === 'dailyReading' ? 'dailyReading' : target.libraryId;
+}
 
 type HostApi = {
 	locale?: 'zh-CN' | 'en-US';
@@ -132,9 +136,10 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 	const point = api.modules?.point;
 	const httpRef = useRef(api.http);
 	httpRef.current = api.http;
-	const [target, setTarget] = useState<Target | null>(() =>
+	const [target, setTarget] = useState<ImportTarget | null>(() =>
 		importTargetFromPayload(point?.getPayload('import-drawer') ?? null),
 	);
+	const [omitted, setOmitted] = useState(0);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [result, setResult] = useState<ImportResult | null>(null);
@@ -170,6 +175,7 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 
 	const loadPage = useCallback(async () => {
 		const libraryId = libraryRef.current;
+		const reading = libraryId === 'dailyReading';
 		if (
 			!libraryId ||
 			loadingRef.current ||
@@ -189,9 +195,13 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 		}
 		loadingRef.current = true;
 		setListLoading(true);
-		const url = `/english-learning/vocab-detail/import?libraryId=${encodeURIComponent(libraryId)}${
-			cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
-		}`;
+		const url = reading
+			? `/english-learning/vocab-detail/import?scope=dailyReading${
+					cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+				}`
+			: `/english-learning/vocab-detail/import?libraryId=${encodeURIComponent(libraryId)}${
+					cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+				}`;
 		try {
 			const page = unwrapImported(await http.get(url));
 			if (gen !== genRef.current) return;
@@ -222,8 +232,10 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 		void loadPage();
 	};
 
+	const key = targetKey(target);
+
 	useEffect(() => {
-		libraryRef.current = target?.libraryId ?? '';
+		libraryRef.current = key;
 		genRef.current += 1;
 		cursorRef.current = undefined;
 		holdRef.current = false;
@@ -236,7 +248,28 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 			return;
 		}
 		void loadPage();
-	}, [target?.libraryId, loadPage]);
+	}, [key, loadPage]);
+
+	useEffect(() => {
+		if (key !== 'dailyReading') {
+			setOmitted(0);
+			return;
+		}
+		const http = httpRef.current;
+		if (!http?.get) return;
+		let cancel = false;
+		void http
+			.get('/english-learning/vocab-detail/prompt?scope=dailyReading')
+			.then((res) => {
+				if (!cancel) setOmitted(asCount(unwrap(res).omitted));
+			})
+			.catch(() => {
+				if (!cancel) setOmitted(0);
+			});
+		return () => {
+			cancel = true;
+		};
+	}, [key]);
 
 	useEffect(() => {
 		const root = listViewportRef.current;
@@ -255,7 +288,32 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 
 	const copyPrompt = async () => {
 		try {
-			await navigator.clipboard.writeText(IMPORT_PROMPT);
+			let text = IMPORT_PROMPT;
+			if (target?.scope === 'dailyReading') {
+				const http = httpRef.current;
+				if (!http?.get) throw new Error('');
+				const body = unwrap(
+					await http.get(
+						'/english-learning/vocab-detail/prompt?scope=dailyReading',
+					),
+				);
+				const items = Array.isArray(body.items) ? body.items : [];
+				const left = asCount(body.omitted);
+				setOmitted(left);
+				const title =
+					typeof body.title === 'string' && body.title
+						? body.title
+						: t('vocabImport.readingTitle');
+				const note =
+					left > 0
+						? t('vocabImport.omitted', {
+								count: String(items.length),
+								omitted: String(left),
+							})
+						: '';
+				text = `${IMPORT_PROMPT}\n${note}\n${JSON.stringify({ title, items }, null, 2)}`;
+			}
+			await navigator.clipboard.writeText(text);
 			setCopied(true);
 			setError(null);
 			if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
@@ -295,10 +353,12 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 		if (!http) return;
 		setBusy(true);
 		try {
-			const res = await http.post('/english-learning/vocab-detail/import', {
-				libraryId: target.libraryId,
-				items: fileItems,
-			});
+			const res = await http.post(
+				'/english-learning/vocab-detail/import',
+				target.scope === 'dailyReading'
+					? { scope: 'dailyReading', items: fileItems }
+					: { libraryId: target.libraryId, items: fileItems },
+			);
 			setResult(readResult(res));
 			reloadFirstPage();
 		} catch (cause) {
@@ -316,7 +376,9 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 		setError(null);
 		try {
 			await http.delete(
-				`/english-learning/vocab-detail/import?libraryId=${encodeURIComponent(target.libraryId)}`,
+				target.scope === 'dailyReading'
+					? '/english-learning/vocab-detail/import?scope=dailyReading'
+					: `/english-learning/vocab-detail/import?libraryId=${encodeURIComponent(target.libraryId)}`,
 			);
 			setResult(null);
 			setConfirmClear(false);
@@ -369,7 +431,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 				'bg-teal-500/5 border border-teal-500/6',
 			],
 			[
-				t('vocabImport.statMissing'),
+				t(
+					target?.scope === 'dailyReading'
+						? 'vocabImport.statNotInWords'
+						: 'vocabImport.statMissing',
+				),
 				result?.skippedNotInLibrarySample ?? [],
 				'bg-amber-500/5 border border-amber-500/6',
 			],
@@ -385,7 +451,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 		<div className="text-textcolor flex h-full min-h-0 flex-col text-sm">
 			<div className="shrink-0 space-y-1.5 px-3.5 pt-2.5">
 				<p className="min-w-0 truncate font-medium">
-					{target?.title ?? t('vocabImport.noLibrary')}
+					{target?.scope === 'dailyReading'
+						? t('vocabImport.readingTitle')
+						: target?.scope === 'library'
+							? target.title || t('vocabImport.noLibrary')
+							: t('vocabImport.noLibrary')}
 				</p>
 				<div className="mt-1 flex items-center justify-between gap-2">
 					<span className="text-textcolor text-[13px]">
@@ -414,6 +484,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 			<p className="text-textcolor/70 shrink-0 px-3.5 pt-1.5 pb-2 text-xs leading-relaxed text-justify">
 				{t('vocabImport.hint')}
 			</p>
+			{target?.scope === 'dailyReading' && omitted > 0 ? (
+				<p className="text-textcolor/70 shrink-0 px-3.5 pb-2 text-xs leading-relaxed">
+					{t('vocabImport.omittedHint', { omitted: String(omitted) })}
+				</p>
+			) : null}
 			<p className="flex min-w-0 shrink-0 items-baseline gap-2 px-3.5 pb-1.5 text-[13px]">
 				<span className="text-textcolor shrink-0">
 					{t('vocabImport.importedTitle')}
@@ -451,7 +526,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 					</div>
 				) : showEmpty ? (
 					<p className="text-textcolor/55 px-2 py-4 text-center">
-						{t('vocabImport.importedEmpty')}
+						{t(
+							target?.scope === 'dailyReading'
+								? 'vocabImport.importedEmptyReading'
+								: 'vocabImport.importedEmpty',
+						)}
 					</p>
 				) : (
 					<div className="grid w-full grid-cols-2 gap-2">
@@ -522,7 +601,12 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 					<span className="text-textcolor/25 px-1.5">·</span>
 					{t('vocabImport.statReplaced')} {result.overwritten}
 					<span className="text-textcolor/25 px-1.5">·</span>
-					{t('vocabImport.statMissing')} {result.skippedNotInLibrary}
+					{t(
+						target?.scope === 'dailyReading'
+							? 'vocabImport.statNotInWords'
+							: 'vocabImport.statMissing',
+					)}{' '}
+					{result.skippedNotInLibrary}
 					<span className="text-textcolor/25 px-1.5">·</span>
 					{t('vocabImport.statInvalid')} {result.skippedInvalid}
 				</p>
@@ -582,7 +666,11 @@ export default function VocabImportPanel({ api }: { api: HostApi }) {
 				open={confirmClear}
 				onOpenChange={setConfirmClear}
 				title={t('vocabImport.clearTitle')}
-				description={t('vocabImport.clearDesc')}
+				description={t(
+					target?.scope === 'dailyReading'
+						? 'vocabImport.clearDescReading'
+						: 'vocabImport.clearDesc',
+				)}
 				confirmVariant="destructive"
 				onConfirm={() => void clearManual()}
 			/>

@@ -14,12 +14,12 @@ export type PlayButtonProps = {
 
 const LOOK = {
 	boxed: {
-		on: 'h-7 w-7 rounded-md border border-teal-500/40 bg-teal-500/15 p-0 text-teal-600 dark:text-teal-400',
-		off: 'border-theme/10 text-textcolor/60 hover:border-theme/20 hover:bg-theme/10 h-7 w-7 rounded-md border p-0 hover:text-teal-600 dark:hover:text-teal-400',
+		on: 'h-7 w-7 rounded-md border border-teal-500/40 bg-teal-500/15 p-0 text-teal-500 dark:text-teal-400',
+		off: 'border-theme/10 text-textcolor/60 hover:border-theme/20 hover:bg-theme/10 h-7 w-7 rounded-md border p-0 hover:text-teal-500 dark:hover:text-teal-400',
 	},
 	plain: {
-		on: 'size-6 rounded-md p-0 shadow-none text-teal-500 focus-visible:border-transparent focus-visible:ring-0',
-		off: 'size-6 rounded-md p-0 shadow-none text-textcolor/55 hover:text-teal-400 focus-visible:border-transparent focus-visible:ring-0',
+		on: 'size-7 rounded-md p-0 shadow-none text-teal-500 focus-visible:border-transparent focus-visible:ring-0',
+		off: 'size-7 rounded-md p-0 shadow-none text-textcolor/55 hover:text-teal-400 focus-visible:border-transparent focus-visible:ring-0',
 	},
 } as const;
 

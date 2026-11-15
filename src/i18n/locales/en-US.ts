@@ -211,6 +211,7 @@ const enUS: Record<string, string> = {
 	'vocabDetail.stop': 'Stop',
 
 	'vocabDetailList.empty': 'This library has no analyses yet',
+	'vocabDetailList.emptyReading': 'None of these words have an analysis yet',
 	'vocabDetailList.failed': 'Could not load the list',
 	'vocabDetailList.retry': 'Retry',
 	'vocabDetailList.needDetail': 'Enable Word analysis first',
@@ -220,6 +221,16 @@ const enUS: Record<string, string> = {
 	'vocabImport.statAdded': 'Added',
 	'vocabImport.statReplaced': 'Replaced',
 	'vocabImport.statMissing': 'Not in library',
+	'vocabImport.statNotInWords': 'Not in saved words',
+	'vocabImport.readingTitle': 'Daily reading words',
+	'vocabImport.omitted':
+		'The prompt includes only the {count} newest words. {omitted} older words were left out. IPA may be empty.',
+	'vocabImport.omittedHint':
+		'More than 2000 words: the prompt keeps the newest 2000 and leaves out {omitted}.',
+	'vocabImport.importedEmptyReading':
+		'No imported analyses for these words yet',
+	'vocabImport.clearDescReading':
+		'This deletes only analyses you imported for these saved words. Opening a card again uses the shared cache or generates anew.',
 	'vocabImport.statInvalid': 'Invalid',
 	'vocabImport.noLibrary': 'No library selected',
 	'vocabImport.hint':
@@ -256,6 +267,13 @@ const enUS: Record<string, string> = {
 	'dailyReadingWords.playWord': 'Play word',
 	'dailyReadingWords.playSentence': 'Play sentence',
 	'dailyReadingWords.stop': 'Stop',
+	'dailyReadingWords.openDetail': 'Word analysis',
+	'dailyReadingWords.needDetail': 'Enable Word analysis first',
+	'dailyReadingWords.detailList': 'Word analysis',
+	'dailyReadingWords.importDetail': 'Import analysis',
+	'dailyReadingWords.export': 'Export',
+	'dailyReadingWords.exportJson': 'Export JSON',
+	'dailyReadingWords.exportDocx': 'Export Word',
 	'home.dailyReadingWords.title': 'Daily reading words',
 	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 100 per page',
 };

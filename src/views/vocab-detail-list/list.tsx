@@ -84,9 +84,11 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 	const loadedRef = useRef(0);
 	const libraryRef = useRef('');
 	const genRef = useRef(0);
+	const [reading, setReading] = useState(false);
 
 	const loadPage = useCallback(async () => {
 		const libraryId = libraryRef.current;
+		const reading = libraryId === 'dailyReading';
 		if (
 			!libraryId ||
 			loadingRef.current ||
@@ -104,9 +106,13 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 		setLoading(true);
 		const gen = genRef.current;
 		const cursor = cursorRef.current;
-		const url = `/english-learning/vocab-detail/list?libraryId=${encodeURIComponent(libraryId)}${
-			cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
-		}`;
+		const url = reading
+			? `/english-learning/vocab-detail/list?scope=dailyReading${
+					cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+				}`
+			: `/english-learning/vocab-detail/list?libraryId=${encodeURIComponent(libraryId)}${
+					cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+				}`;
 		try {
 			const page = unwrap(await api.http.get(url));
 			if (gen !== genRef.current) return;
@@ -133,10 +139,15 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 	useEffect(() => {
 		const point = api.modules?.point;
 		const apply = () => {
-			const next = libraryIdFromContext(point?.getContext());
+			const payload = point?.getPayload('drawer');
+			const next =
+				payload?.scope === 'dailyReading'
+					? 'dailyReading'
+					: libraryIdFromContext(point?.getContext());
 			if (next === libraryRef.current && cursorRef.current !== undefined)
 				return;
 			libraryRef.current = next;
+			setReading(next === 'dailyReading');
 			cursorRef.current = undefined;
 			holdRef.current = false;
 			loadingRef.current = false;
@@ -206,7 +217,11 @@ export default function VocabDetailList({ api }: { api: HostApi }) {
 					<div className="pr-3.5">
 						{showEmpty ? (
 							<p className="text-textcolor/55 px-2 py-4 text-center">
-								{t('vocabDetailList.empty')}
+								{t(
+									reading
+										? 'vocabDetailList.emptyReading'
+										: 'vocabDetailList.empty',
+								)}
 							</p>
 						) : (
 							<>

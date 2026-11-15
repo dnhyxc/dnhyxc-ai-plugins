@@ -205,6 +205,7 @@ const zhCN: Record<string, string> = {
 	'vocabDetail.stop': '停止',
 
 	'vocabDetailList.empty': '这本库还没有解析',
+	'vocabDetailList.emptyReading': '这些生词还没有解析',
 	'vocabDetailList.failed': '列表加载失败',
 	'vocabDetailList.retry': '重试',
 	'vocabDetailList.needDetail': '请先启用单词解析',
@@ -214,6 +215,15 @@ const zhCN: Record<string, string> = {
 	'vocabImport.statAdded': '新增',
 	'vocabImport.statReplaced': '覆盖',
 	'vocabImport.statMissing': '不在库中',
+	'vocabImport.statNotInWords': '不在生词里',
+	'vocabImport.readingTitle': '每日阅读生词',
+	'vocabImport.omitted':
+		'提示词只包含较新的 {count} 个词，还有 {omitted} 个未写入。音标可以留空。',
+	'vocabImport.omittedHint':
+		'生词超过 2000 个时，提示词只含较新的 2000 个，还有 {omitted} 个未包含。',
+	'vocabImport.importedEmptyReading': '还没有导入的生词解析',
+	'vocabImport.clearDescReading':
+		'只删除你在这些生词上已导入的解析。之后从卡片打开会回到全站缓存或重新生成。',
 	'vocabImport.statInvalid': '格式不对',
 	'vocabImport.noLibrary': '还没有选中词库',
 	'vocabImport.hint':
@@ -250,6 +260,13 @@ const zhCN: Record<string, string> = {
 	'dailyReadingWords.playWord': '朗读单词',
 	'dailyReadingWords.playSentence': '朗读句子',
 	'dailyReadingWords.stop': '停止',
+	'dailyReadingWords.openDetail': '单词解析',
+	'dailyReadingWords.needDetail': '请先启用单词解析',
+	'dailyReadingWords.detailList': '单词解析',
+	'dailyReadingWords.importDetail': '导入解析',
+	'dailyReadingWords.export': '导出',
+	'dailyReadingWords.exportJson': '导出 JSON',
+	'dailyReadingWords.exportDocx': '导出 Word',
 	'home.dailyReadingWords.title': '每日阅读生词',
 	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 滚动每页 100 条',
 };

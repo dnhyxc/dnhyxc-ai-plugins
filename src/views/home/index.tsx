@@ -1,5 +1,6 @@
 import {
 	ArrowRight,
+	Bookmark,
 	BookOpen,
 	Brain,
 	FileUp,
@@ -29,6 +30,13 @@ export default function Home() {
 	const { t } = useI18n();
 
 	const pages: PageDef[] = [
+		{
+			to: '/english-learning/daily-reading/words',
+			title: t('home.dailyReadingWords.title'),
+			desc: t('home.dailyReadingWords.desc'),
+			category: t('home.category.learning'),
+			icon: Bookmark,
+		},
 		{
 			to: '/english-learning/notes',
 			title: t('home.learningNotes.title'),

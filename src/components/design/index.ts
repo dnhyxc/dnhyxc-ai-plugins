@@ -6,6 +6,8 @@ export {
 	stripNoteTitleHtml,
 	useNoteImagePreview,
 } from './NotePreview';
+export type { PlayButtonProps } from './PlayButton';
+export { default as PlayButton } from './PlayButton';
 export { default as HoverPopover } from './Popover';
 export type { RatePanelProps } from './RatePanel';
 export { RatePanel } from './RatePanel';

@@ -2,6 +2,7 @@
 const zhCN: Record<string, string> = {
 	'common.confirm': '确认',
 	'common.cancel': '取消',
+	'common.clear': '清空',
 	'common.untitledNote': '无标题笔记',
 	'common.emptyContent': '暂无内容',
 	'common.requestFailed': '请求失败',
@@ -239,6 +240,18 @@ const zhCN: Record<string, string> = {
 		'新增 {imported}，覆盖 {overwritten}，不在库中 {skippedNotInLibrary}，格式不对 {skippedInvalid}',
 	'vocabImport.notInLibrary': '不在库中：{words}',
 	'vocabImport.invalid': '格式不对：{words}',
+	'dailyReadingWords.filterTitle': '按篇目标题筛选',
+	'dailyReadingWords.all': '全部篇目',
+	'dailyReadingWords.untitled': '未命名篇目',
+	'dailyReadingWords.search': '搜索单词或中文释义',
+	'dailyReadingWords.empty': '还没有收集的单词',
+	'dailyReadingWords.loadFailed': '生词加载失败',
+	'dailyReadingWords.openFailed': '这篇暂时打不开',
+	'dailyReadingWords.playWord': '朗读单词',
+	'dailyReadingWords.playSentence': '朗读句子',
+	'dailyReadingWords.stop': '停止',
+	'home.dailyReadingWords.title': '每日阅读生词',
+	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 滚动每页 100 条',
 };
 
 export default zhCN;

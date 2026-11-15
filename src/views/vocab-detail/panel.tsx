@@ -1,4 +1,5 @@
 import Loading from '@design/Loading';
+import PlayButton from '@design/PlayButton';
 import { Button } from '@ui/button';
 import {
 	DropdownMenu,
@@ -17,7 +18,6 @@ import {
 	RefreshCw,
 	Sparkles,
 	Square,
-	Volume2,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useHostLocale, useI18n } from '@/hooks';
@@ -100,6 +100,7 @@ function WordHead({
 			</div>
 			{onPlay ? (
 				<PlayButton
+					className="mt-0.5"
 					playing={playing}
 					label={playing ? t('vocabDetail.stop') : t('vocabDetail.play')}
 					onClick={() => onPlay(key, card.word)}
@@ -274,37 +275,6 @@ function StopGenerate({
 	);
 }
 
-function PlayButton({
-	playing,
-	label,
-	onClick,
-}: {
-	playing: boolean;
-	label: string;
-	onClick: () => void;
-}) {
-	return (
-		<Button
-			type="button"
-			variant="ghost"
-			size="sm"
-			aria-label={label}
-			onClick={onClick}
-			className={
-				playing
-					? 'mt-0.5 h-7 w-7 shrink-0 rounded-md border border-teal-500/40 bg-teal-500/15 p-0 text-teal-600 dark:text-teal-400'
-					: 'border-theme/10 text-textcolor/60 hover:border-theme/20 hover:bg-theme/10 mt-0.5 h-7 w-7 shrink-0 rounded-md border p-0 hover:text-teal-600 dark:hover:text-teal-400'
-			}
-		>
-			{playing ? (
-				<Square className="size-3.5 fill-current" />
-			) : (
-				<Volume2 className="size-3.5" />
-			)}
-		</Button>
-	);
-}
-
 function Lines({
 	items,
 	tag = false,
@@ -352,6 +322,7 @@ function Lines({
 					<div key={item.key} className="flex items-start gap-2">
 						{line}
 						<PlayButton
+							className="mt-0.5"
 							playing={playing}
 							label={(playing ? stopLabel : playLabel) ?? ''}
 							onClick={() => onPlay(item.key, item.speak ?? '')}
@@ -437,6 +408,7 @@ function DetailSections({
 								</div>
 								{onPlay ? (
 									<PlayButton
+										className="mt-0.5"
 										playing={playing}
 										label={playing ? stopLabel : playLabel}
 										onClick={() => onPlay(key, example.en)}

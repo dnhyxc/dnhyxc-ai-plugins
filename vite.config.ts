@@ -52,6 +52,7 @@ export default defineConfig(({ mode }) => {
 					'./VocabDetail': './src/views/vocab-detail/index.ts',
 					'./VocabDetailList': './src/views/vocab-detail-list/index.ts',
 					'./VocabDetailImport': './src/views/vocab-detail-import/index.ts',
+					'./DailyReadingWords': './src/views/daily-reading-words/index.tsx',
 				},
 				shared: {
 					react: { singleton: true, requiredVersion: '^19.1.0' },

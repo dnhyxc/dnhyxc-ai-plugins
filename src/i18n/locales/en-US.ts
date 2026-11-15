@@ -2,6 +2,7 @@
 const enUS: Record<string, string> = {
 	'common.confirm': 'Confirm',
 	'common.cancel': 'Cancel',
+	'common.clear': 'Clear',
 	'common.untitledNote': 'Untitled note',
 	'common.emptyContent': 'No content',
 	'common.requestFailed': 'Request failed',
@@ -245,6 +246,18 @@ const enUS: Record<string, string> = {
 		'Added {imported}, replaced {overwritten}, not in library {skippedNotInLibrary}, invalid {skippedInvalid}',
 	'vocabImport.notInLibrary': 'Not in this library: {words}',
 	'vocabImport.invalid': 'Invalid: {words}',
+	'dailyReadingWords.filterTitle': 'Filter by passage title',
+	'dailyReadingWords.all': 'All passages',
+	'dailyReadingWords.untitled': 'Untitled passage',
+	'dailyReadingWords.search': 'Search word or Chinese gloss',
+	'dailyReadingWords.empty': 'No saved words yet',
+	'dailyReadingWords.loadFailed': 'Could not load saved words',
+	'dailyReadingWords.openFailed': 'This passage cannot be opened',
+	'dailyReadingWords.playWord': 'Play word',
+	'dailyReadingWords.playSentence': 'Play sentence',
+	'dailyReadingWords.stop': 'Stop',
+	'home.dailyReadingWords.title': 'Daily reading words',
+	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 100 per page',
 };
 
 export default enUS;

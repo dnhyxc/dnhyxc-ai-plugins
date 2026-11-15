@@ -1,6 +1,7 @@
 import { Link, type RouteObject } from 'react-router';
 import Layout from '@/layout';
 import { mockApi, mockPlugin } from '@/utils/mockHost';
+import DailyReadingWordsApp from '@/views/daily-reading-words';
 import EbookHighlightsApp from '@/views/ebook/highlights';
 import IdeasListApp from '@/views/ebook/ideas';
 import EbookTestBookInfoApp from '@/views/ebook/toolbar-test/book-info';
@@ -156,6 +157,73 @@ export const routes: RouteObject[] = [
 									}),
 								},
 								modules: { point: previewPoint },
+							})}
+						/>
+					</div>
+				),
+			},
+			{
+				path: 'english-learning/daily-reading/words',
+				element: (
+					<div className="h-full min-h-112">
+						<DailyReadingWordsApp
+							api={mockApi({
+								http: {
+									get: async (url: string) => {
+										if (url.includes('/sources')) {
+											return {
+												data: [
+													{
+														readingId: 'preview-reading',
+														titleEn: 'A small kitchen',
+														titleZh: '一间小厨房',
+														count: 1,
+														collectedAt: '2026-11-15T00:00:00.000Z',
+													},
+												],
+											};
+										}
+										return {
+											data: {
+												items: [
+													{
+														id: 'preview-word',
+														word: 'gourmet',
+														wordKey: 'gourmet',
+														zh: '美食',
+														zhEdited: false,
+														updatedAt: '2026-11-15T00:00:00.000Z',
+														sources: [
+															{
+																readingId: 'preview-reading',
+																titleEn: 'A small kitchen',
+																titleZh: '一间小厨房',
+																sentence: 'The gourmet tasted the soup.',
+																surface: 'glossary',
+																collectedAt: '2026-11-15T00:00:00.000Z',
+															},
+														],
+													},
+												],
+												total: 1,
+												nextCursor: null,
+											},
+										};
+									},
+									put: async () => ({
+										data: {
+											id: 'preview-word',
+											zh: '美食家',
+											zhEdited: true,
+										},
+									}),
+								},
+								modules: {
+									point: {
+										command: (name: string, arg: unknown) =>
+											name === 'openReading' && typeof arg === 'string',
+									},
+								},
 							})}
 						/>
 					</div>

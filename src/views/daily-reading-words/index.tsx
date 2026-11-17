@@ -9,8 +9,14 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from '@ui/dropdown-menu';
-import { Button, ScrollArea, TooltipProvider } from '@ui/index';
-import { ChevronsUpDown, FileDown, Puzzle, Sparkle } from 'lucide-react';
+import { Button, Input, ScrollArea, TooltipProvider } from '@ui/index';
+import {
+	ChevronsUpDown,
+	FileDown,
+	Pencil,
+	Puzzle,
+	Sparkle,
+} from 'lucide-react';
 import { type UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
@@ -20,11 +26,13 @@ import {
 	type ReadingSource,
 	type ReadingWord,
 	readingTitle,
+	saveWordZh,
 } from './api';
 
 type HostApi = {
 	http?: {
 		get: (url: string) => Promise<unknown>;
+		put?: (url: string, body?: unknown) => Promise<unknown>;
 	};
 	ui?: {
 		showToast: (options: {
@@ -156,9 +164,13 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 	const [exportBusy, setExportBusy] = useState<ReadonlySet<string>>(
 		() => new Set(),
 	);
+	const [edit, setEdit] = useState<{ id: string; zh: string } | null>(null);
+	const [savingId, setSavingId] = useState<string | null>(null);
 	const ticketRef = useRef(0);
 	const loadingRef = useRef(false);
 	const playRun = useRef(0);
+	const savingRef = useRef(false);
+	const skipBlur = useRef(false);
 	const point = api.modules?.point;
 	const pageRef = useRef({ readingId, q, nextCursor });
 	pageRef.current = { readingId, q, nextCursor };
@@ -362,6 +374,31 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 			message: t('dailyReadingWords.needDetail'),
 			type: 'info',
 		});
+	};
+
+	const commitZh = async () => {
+		if (!edit || !http?.put || savingRef.current) return;
+		const id = edit.id;
+		const zh = edit.zh.trim().slice(0, 500);
+		const current = items.find((row) => row.id === id);
+		if (current && current.zh.trim() === zh) {
+			setEdit((open) => (open?.id === id ? null : open));
+			return;
+		}
+		savingRef.current = true;
+		setSavingId(id);
+		try {
+			const saved = await saveWordZh(http, id, zh);
+			setItems((rows) =>
+				rows.map((row) => (row.id === saved.id ? { ...row, ...saved } : row)),
+			);
+			setEdit((open) => (open?.id === id ? null : open));
+		} catch {
+			/* 主项目请求失败时已经弹出错误 */
+		} finally {
+			savingRef.current = false;
+			setSavingId(null);
+		}
 	};
 
 	const openDetail = (item: ReadingWord) => {
@@ -572,19 +609,59 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 											key={item.id}
 											className="bg-theme/5 border-theme/5 relative flex h-full min-w-0 flex-col gap-1 overflow-hidden rounded-md border p-2"
 										>
-											{caps.detail ? (
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-sm"
-													className="absolute top-2 right-2 size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
-													aria-label={t('dailyReadingWords.openDetail')}
-													onClick={() => openDetail(item)}
+											<div className="absolute top-2 right-2 flex items-center gap-1">
+												<Tip
+													label={
+														item.zh.trim()
+															? t('dailyReadingWords.editZh')
+															: t('dailyReadingWords.setZh')
+													}
 												>
-													<Sparkle className="size-4" />
-												</Button>
-											) : null}
-											<div className="flex items-center gap-1.5 pr-7">
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-sm"
+														className="size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
+														aria-label={
+															item.zh.trim()
+																? t('dailyReadingWords.editZh')
+																: t('dailyReadingWords.setZh')
+														}
+														onMouseDown={(event) => {
+															// 否则输入框先失焦并保存，这次点击又会把它打开
+															event.preventDefault();
+														}}
+														onClick={() => {
+															if (edit?.id === item.id) {
+																skipBlur.current = true;
+																void commitZh();
+																return;
+															}
+															setEdit({ id: item.id, zh: item.zh });
+														}}
+													>
+														<Pencil className="size-4" />
+													</Button>
+												</Tip>
+												{caps.detail ? (
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-sm"
+														className="size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
+														aria-label={t('dailyReadingWords.openDetail')}
+														onClick={() => openDetail(item)}
+													>
+														<Sparkle className="size-4" />
+													</Button>
+												) : null}
+											</div>
+											<div
+												className={cn(
+													'flex items-center gap-1.5',
+													caps.detail ? 'pr-16' : 'pr-8',
+												)}
+											>
 												<div className="text-lg leading-7">{item.word}</div>
 												<PlayButton
 													look="plain"
@@ -600,13 +677,48 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 													}
 												/>
 											</div>
-											{item.zh ? (
-												<p className="text-textcolor/80 mt-1 text-sm">
-													{item.zh}
-												</p>
-											) : null}
+											<div className="flex h-8 items-center">
+												{edit?.id === item.id ? (
+													<Input
+														autoFocus
+														maxLength={500}
+														disabled={savingId === item.id}
+														value={edit.zh}
+														placeholder={t('dailyReadingWords.zhPlaceholder')}
+														className="border-theme/15 bg-theme-background h-8 w-full px-2.5 pt-0 pb-0.5 text-sm leading-[28px]! shadow-none focus-visible:border-theme/15 focus-visible:ring-0"
+														onChange={(event) =>
+															setEdit({
+																id: item.id,
+																zh: event.target.value,
+															})
+														}
+														onKeyDown={(event) => {
+															if (event.key === 'Escape') {
+																event.preventDefault();
+																skipBlur.current = true;
+																setEdit(null);
+															}
+															if (event.key === 'Enter') {
+																event.preventDefault();
+																void commitZh();
+															}
+														}}
+														onBlur={() => {
+															if (skipBlur.current) {
+																skipBlur.current = false;
+																return;
+															}
+															void commitZh();
+														}}
+													/>
+												) : (
+													<p className="text-textcolor/80 truncate text-sm">
+														{item.zh}
+													</p>
+												)}
+											</div>
 											{item.sources.some((source) => source.sentence) ? (
-												<div className="mt-1 flex flex-col gap-1">
+												<div className="flex flex-col gap-1">
 													{item.sources.map((source) =>
 														source.sentence ? (
 															<p

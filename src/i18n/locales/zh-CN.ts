@@ -267,6 +267,9 @@ const zhCN: Record<string, string> = {
 	'dailyReadingWords.export': '导出',
 	'dailyReadingWords.exportJson': '导出 JSON',
 	'dailyReadingWords.exportDocx': '导出 Word',
+	'dailyReadingWords.setZh': '补充中文释义',
+	'dailyReadingWords.editZh': '修改中文释义',
+	'dailyReadingWords.zhPlaceholder': '输入中文释义',
 	'home.dailyReadingWords.title': '每日阅读生词',
 	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 滚动每页 100 条',
 };

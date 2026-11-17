@@ -274,6 +274,9 @@ const enUS: Record<string, string> = {
 	'dailyReadingWords.export': 'Export',
 	'dailyReadingWords.exportJson': 'Export JSON',
 	'dailyReadingWords.exportDocx': 'Export Word',
+	'dailyReadingWords.setZh': 'Add Chinese gloss',
+	'dailyReadingWords.editZh': 'Edit Chinese gloss',
+	'dailyReadingWords.zhPlaceholder': 'Chinese gloss',
 	'home.dailyReadingWords.title': 'Daily reading words',
 	'home.dailyReadingWords.desc': 'expose ./DailyReadingWords · 100 per page',
 };

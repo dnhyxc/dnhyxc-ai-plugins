@@ -33,6 +33,7 @@ export type WordPage = {
 
 type HostHttp = {
 	get: (url: string) => Promise<unknown>;
+	put?: (url: string, body?: unknown) => Promise<unknown>;
 };
 
 const ROOT = '/english-learning/daily-reading-words';
@@ -83,4 +84,15 @@ export async function listWords(
 		total: typeof data?.total === 'number' ? data.total : 0,
 		nextCursor: data?.nextCursor ?? null,
 	};
+}
+
+export async function saveWordZh(
+	http: HostHttp,
+	id: string,
+	zh: string,
+): Promise<ReadingWord> {
+	if (!http.put) throw new Error('no put');
+	return unwrap<ReadingWord>(
+		await http.put(`${ROOT}/${encodeURIComponent(id)}`, { zh }),
+	);
 }

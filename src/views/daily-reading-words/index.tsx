@@ -2,15 +2,16 @@ import '@/styles.css';
 import Loading from '@design/Loading';
 import PlayButton from '@design/PlayButton';
 import SearchInput from '@design/SearchInput';
+import Tip from '@design/Tooltip';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from '@ui/dropdown-menu';
-import { Button, ScrollArea } from '@ui/index';
-import { ChevronsUpDown, FileDown, Sparkle } from 'lucide-react';
-import { type UIEvent, useEffect, useRef, useState } from 'react';
+import { Button, ScrollArea, TooltipProvider } from '@ui/index';
+import { ChevronsUpDown, FileDown, Puzzle, Sparkle } from 'lucide-react';
+import { type UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '@/hooks';
 import { cn } from '@/lib/utils';
 import {
@@ -30,6 +31,7 @@ type HostApi = {
 			message: string;
 			type?: 'success' | 'error' | 'info';
 		}) => void;
+		readIconSvg?: (url: string) => Promise<string | null>;
 	};
 	modules?: {
 		point?: { command: (name: string, arg?: unknown) => unknown };
@@ -54,6 +56,73 @@ function pinnedFromUrl(): PinnedTitle {
 		titleEn: params.get('titleEn')?.trim() ?? '',
 		titleZh: params.get('titleZh')?.trim() ?? '',
 	};
+}
+
+/** 与搜索框同高、同边框的图标按钮。 */
+const ACTION_BTN =
+	'size-9 shrink-0 rounded-md border border-theme/15 bg-transparent p-0 text-textcolor/70 shadow-none hover:border-theme/20 hover:bg-theme/10 hover:text-teal-500';
+
+type RegistryPlugin = {
+	id: string;
+	menu?: { icon?: string };
+	host?: { icon?: string };
+};
+
+/** 插件中心写入的图标。菜单图标优先，否则用宿主槽图标。 */
+function registryIcon(id: string): string | undefined {
+	try {
+		const key = `dnhyxc.plugin.registry.${import.meta.env.PROD ? 'prod' : 'dev'}.v1`;
+		const raw = localStorage.getItem(key);
+		if (!raw) return;
+		const plugins = (JSON.parse(raw) as { plugins?: RegistryPlugin[] }).plugins;
+		const plugin = plugins?.find((item) => item.id === id);
+		return (plugin?.menu?.icon ?? plugin?.host?.icon)?.trim() || undefined;
+	} catch {
+		return;
+	}
+}
+
+function RegistryIcon({
+	id,
+	read,
+}: {
+	id: string;
+	read?: (url: string) => Promise<string | null>;
+}) {
+	const url = registryIcon(id);
+	const [svg, setSvg] = useState<string | null>(null);
+	const [miss, setMiss] = useState(false);
+	useEffect(() => {
+		if (!url || !read) {
+			setSvg(null);
+			setMiss(!url || !read);
+			return;
+		}
+		let cancel = false;
+		setMiss(false);
+		void read(url)
+			.then((markup) => {
+				if (cancel) return;
+				setSvg(markup);
+				setMiss(!markup);
+			})
+			.catch(() => {
+				if (!cancel) setMiss(true);
+			});
+		return () => {
+			cancel = true;
+		};
+	}, [url, read]);
+	const markup = useMemo(() => (svg ? { __html: svg } : null), [svg]);
+	if (!url || miss) return <Puzzle className="size-4" aria-hidden />;
+	if (!markup) return <span className="inline-block size-4" aria-hidden />;
+	return (
+		<span
+			aria-hidden
+			className="inline-flex size-4 text-current"
+			dangerouslySetInnerHTML={markup}
+		/>
+	);
 }
 
 function passageLabel(titleEn: string, titleZh: string): string {
@@ -366,219 +435,236 @@ export default function DailyReadingWords({ api }: { api: HostApi }) {
 					: t('dailyReadingWords.all'));
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex shrink-0 gap-2 px-4 pt-4">
-				<DropdownMenu modal={false}>
-					<DropdownMenuTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							className="border-theme/15 h-9 min-w-0 flex-1 justify-between rounded-md border bg-transparent px-2 font-normal shadow-none hover:bg-transparent"
-							aria-label={`${t('dailyReadingWords.filterTitle')} ${filterLabel}`}
-						>
-							<span className="truncate">{filterLabel}</span>
-							<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent
-						align="start"
-						className="z-50 w-(--radix-dropdown-menu-trigger-width)"
-					>
-						<div className="flex flex-col gap-1.5">
-							<DropdownMenuItem
-								className={cn(!readingId && 'bg-theme/10 text-teal-500')}
-								onSelect={() => chooseReading('')}
+		<TooltipProvider delayDuration={200}>
+			<div className="flex h-full min-h-0 flex-col">
+				<div className="flex shrink-0 gap-4 px-4 pt-4">
+					<DropdownMenu modal={false}>
+						<DropdownMenuTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								className="border-theme/15 h-9 min-w-0 flex-1 justify-between rounded-md border bg-transparent px-2 font-normal shadow-none hover:bg-transparent"
+								aria-label={`${t('dailyReadingWords.filterTitle')} ${filterLabel}`}
 							>
-								{t('dailyReadingWords.all')}
-							</DropdownMenuItem>
-							{readingId && !known && filterLabel ? (
+								<span className="truncate">{filterLabel}</span>
+								<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							align="start"
+							className="z-50 w-(--radix-dropdown-menu-trigger-width)"
+						>
+							<div className="flex flex-col gap-1.5">
 								<DropdownMenuItem
-									className="bg-theme/10 text-teal-500"
-									onSelect={() => chooseReading(readingId)}
+									className={cn(!readingId && 'bg-theme/10 text-teal-500')}
+									onSelect={() => chooseReading('')}
 								>
-									{filterLabel}
+									{t('dailyReadingWords.all')}
 								</DropdownMenuItem>
-							) : null}
-							{sources.map((source) => (
-								<DropdownMenuItem
-									key={source.readingId}
-									className={cn(
-										source.readingId === readingId &&
-											'bg-theme/10 text-teal-500',
-									)}
-									onSelect={() => chooseReading(source.readingId)}
-								>
-									{readingLabel(source)}
-								</DropdownMenuItem>
-							))}
-						</div>
-					</DropdownMenuContent>
-				</DropdownMenu>
-				<SearchInput
-					committedQuery={q}
-					onCommit={commitQuery}
-					placeholder={t('dailyReadingWords.search')}
-					className="border-theme/15 bg-transparent px-2 text-sm shadow-none"
-				/>
-				<DropdownMenu modal={false}>
-					<DropdownMenuTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="shrink-0"
-							aria-label={t('dailyReadingWords.export')}
-						>
-							<FileDown className="size-4" />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end">
-						<DropdownMenuItem
-							disabled={exportBusy.has('json')}
-							onSelect={() => runExport('json')}
-						>
-							{t('dailyReadingWords.exportJson')}
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							disabled={exportBusy.has('docx')}
-							onSelect={() => runExport('docx')}
-						>
-							{t('dailyReadingWords.exportDocx')}
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-				{caps.list ? (
-					<Button
-						type="button"
-						variant="ghost"
-						className="shrink-0 text-teal-500"
-						onClick={openList}
-					>
-						{t('dailyReadingWords.detailList')}
-					</Button>
-				) : null}
-				{caps.import ? (
-					<Button
-						type="button"
-						variant="ghost"
-						className="shrink-0 text-teal-500"
-						onClick={openImport}
-					>
-						{t('dailyReadingWords.importDetail')}
-					</Button>
-				) : null}
-			</div>
-			{loading && items.length === 0 ? (
-				<Loading className="min-h-0 flex-1" />
-			) : (
-				<div className="flex min-h-0 flex-1 flex-col py-4">
-					<ScrollArea
-						className="min-h-0 flex-1"
-						scrollbarClassName="!right-px w-1.5 border-l-0 p-0"
-						onScroll={onScroll}
-					>
-						<div className="flex flex-col gap-3 px-4">
-							{!items.length ? (
-								<p className="text-textcolor/60 py-8 text-center text-sm">
-									{t('dailyReadingWords.empty')}
-								</p>
-							) : null}
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-4">
-								{items.map((item) => (
-									<div
-										key={item.id}
-										className="bg-theme/5 border-theme/5 relative flex h-full min-w-0 flex-col gap-1 overflow-hidden rounded-md border p-2"
+								{readingId && !known && filterLabel ? (
+									<DropdownMenuItem
+										className="bg-theme/10 text-teal-500"
+										onSelect={() => chooseReading(readingId)}
 									>
-										{caps.detail ? (
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												className="absolute top-2 right-2 size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
-												aria-label={t('dailyReadingWords.openDetail')}
-												onClick={() => openDetail(item)}
-											>
-												<Sparkle className="size-4" />
-											</Button>
-										) : null}
-										<div className="flex items-center gap-1.5 pr-7">
-											<div className="text-lg leading-7">{item.word}</div>
-											<PlayButton
-												look="plain"
-												playing={playingKey === `word:${item.id}`}
-												iconClassName="size-4"
-												label={
-													playingKey === `word:${item.id}`
-														? t('dailyReadingWords.stop')
-														: t('dailyReadingWords.playWord')
-												}
-												onClick={() => togglePlay(`word:${item.id}`, item.word)}
-											/>
-										</div>
-										{item.zh ? (
-											<p className="text-textcolor/80 mt-1 text-sm">
-												{item.zh}
-											</p>
-										) : null}
-										{item.sources.some((source) => source.sentence) ? (
-											<div className="mt-1 flex flex-col gap-1">
-												{item.sources.map((source) =>
-													source.sentence ? (
-														<p
-															key={source.readingId}
-															className="text-textcolor/70 text-sm leading-6"
-														>
-															{source.sentence}
-															<PlayButton
-																look="plain"
-																className="ml-1.5 inline-flex align-middle -mt-0.5"
-																iconClassName="size-4"
-																playing={
-																	playingKey ===
-																	`sentence:${item.id}:${source.readingId}`
-																}
-																label={
-																	playingKey ===
-																	`sentence:${item.id}:${source.readingId}`
-																		? t('dailyReadingWords.stop')
-																		: t('dailyReadingWords.playSentence')
-																}
-																onClick={() =>
-																	togglePlay(
-																		`sentence:${item.id}:${source.readingId}`,
-																		source.sentence,
-																	)
-																}
-															/>
-														</p>
-													) : null,
-												)}
-											</div>
-										) : null}
-										<div className="mt-auto flex flex-col gap-1 pt-1">
-											{item.sources.map((source) => (
-												<button
-													key={source.readingId}
-													type="button"
-													className="text-teal-500 text-left text-sm underline"
-													onClick={() => openReading(source.readingId)}
-												>
-													{source.titleEn || source.readingId}
-												</button>
-											))}
-										</div>
-									</div>
+										{filterLabel}
+									</DropdownMenuItem>
+								) : null}
+								{sources.map((source) => (
+									<DropdownMenuItem
+										key={source.readingId}
+										className={cn(
+											source.readingId === readingId &&
+												'bg-theme/10 text-teal-500',
+										)}
+										onSelect={() => chooseReading(source.readingId)}
+									>
+										{readingLabel(source)}
+									</DropdownMenuItem>
 								))}
 							</div>
-							{loading ? (
-								<p className="text-textcolor/60 py-3 text-center text-sm">
-									{t('common.loadingMore')}
-								</p>
-							) : null}
-						</div>
-					</ScrollArea>
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<SearchInput
+						committedQuery={q}
+						onCommit={commitQuery}
+						placeholder={t('dailyReadingWords.search')}
+						className="border-theme/15 bg-transparent px-2 text-sm shadow-none"
+					/>
+					<DropdownMenu modal={false}>
+						<Tip label={t('dailyReadingWords.export')}>
+							<DropdownMenuTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className={ACTION_BTN}
+									aria-label={t('dailyReadingWords.export')}
+								>
+									<FileDown className="size-4" />
+								</Button>
+							</DropdownMenuTrigger>
+						</Tip>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem
+								disabled={exportBusy.has('json')}
+								onSelect={() => runExport('json')}
+							>
+								{t('dailyReadingWords.exportJson')}
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								disabled={exportBusy.has('docx')}
+								onSelect={() => runExport('docx')}
+							>
+								{t('dailyReadingWords.exportDocx')}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+					{caps.list ? (
+						<Tip label={t('dailyReadingWords.detailList')}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className={ACTION_BTN}
+								aria-label={t('dailyReadingWords.detailList')}
+								onClick={openList}
+							>
+								<RegistryIcon id="vocabDetailList" read={api.ui?.readIconSvg} />
+							</Button>
+						</Tip>
+					) : null}
+					{caps.import ? (
+						<Tip label={t('dailyReadingWords.importDetail')}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className={ACTION_BTN}
+								aria-label={t('dailyReadingWords.importDetail')}
+								onClick={openImport}
+							>
+								<RegistryIcon
+									id="vocabDetailImport"
+									read={api.ui?.readIconSvg}
+								/>
+							</Button>
+						</Tip>
+					) : null}
 				</div>
-			)}
-		</div>
+				{loading && items.length === 0 ? (
+					<Loading className="min-h-0 flex-1" />
+				) : (
+					<div className="flex min-h-0 flex-1 flex-col py-4">
+						<ScrollArea
+							className="min-h-0 flex-1"
+							scrollbarClassName="!right-px w-1.5 border-l-0 p-0"
+							onScroll={onScroll}
+						>
+							<div className="flex flex-col gap-3 px-4">
+								{!items.length ? (
+									<p className="text-textcolor/60 py-8 text-center text-sm">
+										{t('dailyReadingWords.empty')}
+									</p>
+								) : null}
+								<div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-4">
+									{items.map((item) => (
+										<div
+											key={item.id}
+											className="bg-theme/5 border-theme/5 relative flex h-full min-w-0 flex-col gap-1 overflow-hidden rounded-md border p-2"
+										>
+											{caps.detail ? (
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-sm"
+													className="absolute top-2 right-2 size-7 text-textcolor/55 hover:text-teal-500 border border-theme/10 hover:border-theme/20 hover:bg-theme/10 rounded-md"
+													aria-label={t('dailyReadingWords.openDetail')}
+													onClick={() => openDetail(item)}
+												>
+													<Sparkle className="size-4" />
+												</Button>
+											) : null}
+											<div className="flex items-center gap-1.5 pr-7">
+												<div className="text-lg leading-7">{item.word}</div>
+												<PlayButton
+													look="plain"
+													playing={playingKey === `word:${item.id}`}
+													iconClassName="size-4"
+													label={
+														playingKey === `word:${item.id}`
+															? t('dailyReadingWords.stop')
+															: t('dailyReadingWords.playWord')
+													}
+													onClick={() =>
+														togglePlay(`word:${item.id}`, item.word)
+													}
+												/>
+											</div>
+											{item.zh ? (
+												<p className="text-textcolor/80 mt-1 text-sm">
+													{item.zh}
+												</p>
+											) : null}
+											{item.sources.some((source) => source.sentence) ? (
+												<div className="mt-1 flex flex-col gap-1">
+													{item.sources.map((source) =>
+														source.sentence ? (
+															<p
+																key={source.readingId}
+																className="text-textcolor/70 text-sm leading-6"
+															>
+																{source.sentence}
+																<PlayButton
+																	look="plain"
+																	className="ml-1.5 inline-flex align-middle -mt-0.5"
+																	iconClassName="size-4"
+																	playing={
+																		playingKey ===
+																		`sentence:${item.id}:${source.readingId}`
+																	}
+																	label={
+																		playingKey ===
+																		`sentence:${item.id}:${source.readingId}`
+																			? t('dailyReadingWords.stop')
+																			: t('dailyReadingWords.playSentence')
+																	}
+																	onClick={() =>
+																		togglePlay(
+																			`sentence:${item.id}:${source.readingId}`,
+																			source.sentence,
+																		)
+																	}
+																/>
+															</p>
+														) : null,
+													)}
+												</div>
+											) : null}
+											<div className="mt-auto flex flex-col gap-1 pt-1">
+												{item.sources.map((source) => (
+													<button
+														key={source.readingId}
+														type="button"
+														className="text-teal-500 text-left text-sm underline"
+														onClick={() => openReading(source.readingId)}
+													>
+														{source.titleEn || source.readingId}
+													</button>
+												))}
+											</div>
+										</div>
+									))}
+								</div>
+								{loading ? (
+									<p className="text-textcolor/60 py-3 text-center text-sm">
+										{t('common.loadingMore')}
+									</p>
+								) : null}
+							</div>
+						</ScrollArea>
+					</div>
+				)}
+			</div>
+		</TooltipProvider>
 	);
 }
